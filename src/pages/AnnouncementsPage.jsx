@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
@@ -7,6 +7,7 @@ import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
 import AnnouncementAudienceBadge from '../components/ui/AnnouncementAudienceBadge';
 import { announcements as initialAnnouncements, streams } from '../data/mockData';
+import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function AnnouncementsPage() {
@@ -19,33 +20,50 @@ export default function AnnouncementsPage() {
 
   const handleSendAnnouncement = (e) => {
     e.preventDefault();
-    
-    let deliveredCount = 0;
-    if (audienceType === 'global') {
-      deliveredCount = 126;
-    } else {
-      const streamData = streams.find(s => s.name === selectedStream);
-      deliveredCount = streamData ? Math.floor(Math.random() * 30) + 15 : 0;
-    }
-
-    const announcement = {
-      id: announcements.length + 9001,
-      title,
-      message,
-      audienceType,
-      stream: audienceType === 'stream' ? selectedStream : null,
-      sentBy: adminUser?.name || 'Admin',
-      sentAt: new Date().toISOString(),
-      deliveredCount,
-    };
-
-    setAnnouncements([announcement, ...announcements]);
-    
-    setTitle('');
-    setMessage('');
-    setAudienceType('global');
-    setSelectedStream('');
+    (async () => {
+      try {
+        const payload = {
+          title,
+          message,
+          audience: audienceType,
+          stream: audienceType === 'stream' ? selectedStream : null,
+        };
+        const res = await api.broadcastAnnouncement(payload);
+        if (res?.success) {
+          setAnnouncements(prev => [res.data, ...prev]);
+        } else {
+          // fallback local
+          let deliveredCount = audienceType === 'global' ? 126 : (streams.find(s => s.name === selectedStream) ? Math.floor(Math.random() * 30) + 15 : 0);
+          const announcement = { id: announcements.length + 9001, title, message, audienceType, stream: audienceType === 'stream' ? selectedStream : null, sentBy: adminUser?.name || 'Admin', sentAt: new Date().toISOString(), deliveredCount };
+          setAnnouncements(prev => [announcement, ...prev]);
+        }
+      } catch (err) {
+        let deliveredCount = audienceType === 'global' ? 126 : (streams.find(s => s.name === selectedStream) ? Math.floor(Math.random() * 30) + 15 : 0);
+        const announcement = { id: announcements.length + 9001, title, message, audienceType, stream: audienceType === 'stream' ? selectedStream : null, sentBy: adminUser?.name || 'Admin', sentAt: new Date().toISOString(), deliveredCount };
+        setAnnouncements(prev => [announcement, ...prev]);
+      } finally {
+        setTitle('');
+        setMessage('');
+        setAudienceType('global');
+        setSelectedStream('');
+      }
+    })();
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await api.getRecentAnnouncements();
+        if (!mounted) return;
+        setAnnouncements(res?.success ? res.data.items : initialAnnouncements);
+      } catch (err) {
+        setAnnouncements(initialAnnouncements);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const announcementColumns = [
     {

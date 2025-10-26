@@ -60,7 +60,7 @@ export const apiRequest = async (endpoint, options = {}) => {
 export const api = {
   // Authentication
   login: (email, password) => 
-    apiRequest('/admin/login', {
+    apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),

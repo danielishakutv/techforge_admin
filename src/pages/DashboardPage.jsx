@@ -4,7 +4,8 @@ import StatCard from '../components/ui/StatCard';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import StatusBadge from '../components/ui/StatusBadge';
-import { cohorts, sessions, assignments } from '../data/mockData';
+import { cohorts as mockCohorts, sessions as mockSessions, assignments as mockAssignments } from '../data/mockData';
+import api from '../utils/api';
 
 export default function DashboardPage() {
   const [upcomingSessions, setUpcomingSessions] = useState([]);
@@ -17,42 +18,79 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    const activeCohorts = cohorts.filter(c => c.status === 'Ongoing' || c.status === 'Upcoming');
-    const totalStudents = cohorts.reduce((sum, c) => sum + c.studentsEnrolled, 0);
-    
-    const avgAttendance = cohorts
-      .filter(c => c.status === 'Ongoing')
-      .reduce((sum, c) => sum + c.attendanceRate, 0) / 
-      cohorts.filter(c => c.status === 'Ongoing').length;
+    let mounted = true;
 
-    const waitingGrading = assignments.reduce((sum, a) => {
-      return sum + a.submissions.filter(s => s.status === 'Submitted').length;
-    }, 0);
+    const load = async () => {
+      try {
+        const [cohortRes, sessionRes, assignmentRes] = await Promise.allSettled([
+          api.getCohorts(),
+          api.getSessions(),
+          api.getAssignments(),
+        ]);
 
-    setStats({
-      activeCohorts: activeCohorts.length,
-      totalStudents,
-      avgAttendance: Math.round(avgAttendance * 100),
-      assignmentsWaitingGrading: waitingGrading,
-    });
+        const cohorts = cohortRes.status === 'fulfilled' && cohortRes.value?.success ? cohortRes.value.data.items : mockCohorts;
+        const sessions = sessionRes.status === 'fulfilled' && sessionRes.value?.success ? sessionRes.value.data.items : mockSessions;
+        const assignments = assignmentRes.status === 'fulfilled' && assignmentRes.value?.success ? assignmentRes.value.data.items : mockAssignments;
 
-    const upcoming = sessions
-      .filter(s => new Date(s.date) >= new Date() && s.status === 'Scheduled')
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-    setUpcomingSessions(upcoming);
+        const activeCohorts = cohorts.filter(c => ['Ongoing', 'ongoing', 'Active', 'active', 'upcoming', 'Upcoming'].includes(c.status || c.cohort_name || ''));
+        const totalStudents = cohorts.reduce((sum, c) => sum + (c.studentsEnrolled || 0), 0);
 
-    setAlerts([
-      {
-        id: 1,
-        message: 'Cohort 12 · Web Dev: Attendance dropped below 85% this week.',
-        type: 'warning',
-      },
-      {
-        id: 2,
-        message: 'AI Essentials · Cohort 3: 5 submissions still ungraded.',
-        type: 'info',
-      },
-    ]);
+        const ongoing = cohorts.filter(c => c.status === 'Ongoing' || c.status === 'ongoing' || c.status === 'Active' || c.status === 'active');
+        const avgAttendance = ongoing.length > 0 ? (ongoing.reduce((sum, c) => sum + (c.attendanceRate || 0), 0) / ongoing.length) : 0;
+
+        const waitingGrading = (assignments || []).reduce((sum, a) => {
+          const subs = a.submissions || [];
+          return sum + subs.filter(s => (s.status || '').toLowerCase() === 'submitted').length;
+        }, 0);
+
+        if (!mounted) return;
+        setStats({
+          activeCohorts: activeCohorts.length,
+          totalStudents,
+          avgAttendance: Math.round(avgAttendance * 100),
+          assignmentsWaitingGrading: waitingGrading,
+        });
+
+        const upcoming = (sessions || []).filter(s => new Date(s.date) >= new Date() && (s.status || '').toLowerCase() === 'scheduled')
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        setUpcomingSessions(upcoming);
+
+        setAlerts([
+          {
+            id: 1,
+            message: 'Cohort 12 · Web Dev: Attendance dropped below 85% this week.',
+            type: 'warning',
+          },
+          {
+            id: 2,
+            message: 'AI Essentials · Cohort 3: 5 submissions still ungraded.',
+            type: 'info',
+          },
+        ]);
+      } catch (err) {
+        // fallback to mock data
+        const activeCohorts = mockCohorts.filter(c => c.status === 'Ongoing' || c.status === 'Upcoming');
+        const totalStudents = mockCohorts.reduce((sum, c) => sum + c.studentsEnrolled, 0);
+        const avgAttendance = mockCohorts.filter(c => c.status === 'Ongoing').reduce((sum, c) => sum + c.attendanceRate, 0) / Math.max(1, mockCohorts.filter(c => c.status === 'Ongoing').length);
+        const waitingGrading = mockAssignments.reduce((sum, a) => sum + a.submissions.filter(s => s.status === 'Submitted').length, 0);
+        if (!mounted) return;
+        setStats({
+          activeCohorts: activeCohorts.length,
+          totalStudents,
+          avgAttendance: Math.round(avgAttendance * 100),
+          assignmentsWaitingGrading: waitingGrading,
+        });
+        const upcoming = mockSessions.filter(s => new Date(s.date) >= new Date() && s.status === 'Scheduled').sort((a, b) => new Date(a.date) - new Date(b.date));
+        setUpcomingSessions(upcoming);
+        setAlerts([
+          { id: 1, message: 'Cohort 12 · Web Dev: Attendance dropped below 85% this week.', type: 'warning' },
+          { id: 2, message: 'AI Essentials · Cohort 3: 5 submissions still ungraded.', type: 'info' },
+        ]);
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
   }, []);
 
   const sessionColumns = [

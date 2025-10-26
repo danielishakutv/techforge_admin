@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
@@ -6,19 +6,35 @@ import Drawer from '../components/ui/Drawer';
 import StatusBadge from '../components/ui/StatusBadge';
 import ProgressBar from '../components/ui/ProgressBar';
 import { students as initialStudents } from '../data/mockData';
+import api from '../utils/api';
 
 export default function StudentsPage() {
-  const [students] = useState(initialStudents);
+  const [studentsState, setStudentsState] = useState(initialStudents);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [streamFilter, setStreamFilter] = useState('');
 
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = studentsState.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           student.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStream = streamFilter === '' || student.stream === streamFilter;
     return matchesSearch && matchesStream;
   });
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await api.getStudents();
+        if (!mounted) return;
+        setStudentsState(res?.success ? res.data.items : initialStudents);
+      } catch (err) {
+        setStudentsState(initialStudents);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const studentColumns = [
     {

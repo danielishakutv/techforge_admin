@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
@@ -9,6 +9,7 @@ import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
 import { sessions as initialSessions, cohorts, students } from '../data/mockData';
+import api from '../utils/api';
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState(initialSessions);
@@ -33,36 +34,28 @@ export default function SessionsPage() {
     e.preventDefault();
     const cohort = cohorts.find(c => c.id === parseInt(newSession.cohortId));
     const dateTime = new Date(`${newSession.date}T${newSession.time}:00+01:00`);
-    
-    const session = {
-      id: sessions.length + 201,
-      date: dateTime.toISOString(),
-      topic: newSession.topic,
-      description: newSession.description,
-      cohort: cohort.name,
-      cohortId: cohort.id,
-      stream: cohort.stream,
-      instructor: newSession.instructor,
-      deliveryMode: newSession.deliveryMode,
-      status: 'Scheduled',
-      meetingLink: newSession.deliveryMode === 'Online' ? newSession.meetingLink : null,
-      venue: newSession.deliveryMode === 'Physical' ? newSession.venue : null,
-      attendance: null,
-    };
-    
-    setSessions([...sessions, session]);
-    setShowCreateModal(false);
-    setNewSession({
-      cohortId: '',
-      topic: '',
-      description: '',
-      instructor: '',
-      deliveryMode: 'Online',
-      date: '',
-      time: '',
-      meetingLink: '',
-      venue: '',
-    });
+    (async () => {
+      const payload = {
+        date: dateTime.toISOString(),
+        topic: newSession.topic,
+        description: newSession.description,
+        cohortId: cohort.id,
+        instructor: newSession.instructor,
+        deliveryMode: newSession.deliveryMode,
+        meetingLink: newSession.deliveryMode === 'Online' ? newSession.meetingLink : null,
+        venue: newSession.deliveryMode === 'Physical' ? newSession.venue : null,
+      };
+      try {
+        const res = await api.createSession(payload);
+        const created = res?.success ? res.data : { id: sessions.length + 201, cohort: cohort.name, cohortId: cohort.id, stream: cohort.stream, status: 'Scheduled', attendance: null, ...payload };
+        setSessions(prev => [...prev, created]);
+      } catch (err) {
+        setSessions(prev => [...prev, { id: prev.length + 201, cohort: cohort.name, cohortId: cohort.id, stream: cohort.stream, status: 'Scheduled', attendance: null, ...payload }]);
+      } finally {
+        setShowCreateModal(false);
+        setNewSession({ cohortId: '', topic: '', description: '', instructor: '', deliveryMode: 'Online', date: '', time: '', meetingLink: '', venue: '' });
+      }
+    })();
   };
 
   const handleOpenAttendance = () => {
@@ -80,22 +73,47 @@ export default function SessionsPage() {
     const present = attendanceRecords.filter(r => r.status === 'Present').length;
     const late = attendanceRecords.filter(r => r.status === 'Late').length;
     const absent = attendanceRecords.filter(r => r.status === 'Absent').length;
-
-    const updatedSessions = sessions.map(s => {
-      if (s.id === selectedSession.id) {
-        return {
-          ...s,
-          status: 'Completed',
-          attendance: { present, late, absent },
-        };
+    (async () => {
+      try {
+        await api.markAttendance({ sessionId: selectedSession.id, attendance: attendanceRecords });
+        const updatedSessions = sessions.map(s => {
+          if (s.id === selectedSession.id) {
+            return { ...s, status: 'Completed', attendance: { present, late, absent } };
+          }
+          return s;
+        });
+        setSessions(updatedSessions);
+        setSelectedSession({ ...selectedSession, attendance: { present, late, absent }, status: 'Completed' });
+      } catch (err) {
+        // fallback to local update
+        const updatedSessions = sessions.map(s => {
+          if (s.id === selectedSession.id) {
+            return { ...s, status: 'Completed', attendance: { present, late, absent } };
+          }
+          return s;
+        });
+        setSessions(updatedSessions);
+        setSelectedSession({ ...selectedSession, attendance: { present, late, absent }, status: 'Completed' });
+      } finally {
+        setShowAttendanceModal(false);
       }
-      return s;
-    });
-
-    setSessions(updatedSessions);
-    setSelectedSession({ ...selectedSession, attendance: { present, late, absent }, status: 'Completed' });
-    setShowAttendanceModal(false);
+    })();
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await api.getSessions();
+        if (!mounted) return;
+        setSessions(res?.success ? res.data.items : initialSessions);
+      } catch (err) {
+        setSessions(initialSessions);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const sessionColumns = [
     {

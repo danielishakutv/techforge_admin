@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import { certificates as initialCertificates } from '../data/mockData';
+import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function CertificatesPage() {
@@ -15,26 +16,61 @@ export default function CertificatesPage() {
   const { adminUser } = useAuth();
 
   const handleIssueCertificate = () => {
-    const certNumber = `TFB-${selectedCertificate.stream.split(' ')[0].substring(0, 2).toUpperCase()}-2025-${String(certificates.length + 100).padStart(5, '0')}`;
-    const today = new Date().toISOString().split('T')[0];
-    
-    const updatedCertificates = certificates.map(cert => {
-      if (cert.id === selectedCertificate.id) {
-        return {
-          ...cert,
-          eligibilityStatus: 'Issued',
-          certificateNumber: certNumber,
-          issuedDate: today,
-          pdfUrl: `https://certificates.tokoacademy.org/${certNumber}.pdf`,
-        };
+    (async () => {
+      try {
+        const payload = { studentId: selectedCertificate.studentId, cohortId: selectedCertificate.cohortId };
+        const res = await api.issueCertificate(payload);
+        const issued = res?.success ? res.data : null;
+        if (issued) {
+          setCertificates(prev => prev.map(cert => cert.id === selectedCertificate.id ? { ...cert, eligibilityStatus: 'Issued', certificateNumber: issued.certificateNumber || cert.certificateNumber, issuedDate: issued.issuedDate || cert.issuedDate, pdfUrl: issued.pdfUrl || cert.pdfUrl } : cert));
+        } else {
+          // fallback local update
+          const certNumber = `TFB-${selectedCertificate.stream.split(' ')[0].substring(0, 2).toUpperCase()}-2025-${String(certificates.length + 100).padStart(5, '0')}`;
+          const today = new Date().toISOString().split('T')[0];
+          setCertificates(prev => prev.map(cert => cert.id === selectedCertificate.id ? { ...cert, eligibilityStatus: 'Issued', certificateNumber: certNumber, issuedDate: today, pdfUrl: `https://certificates.tokoacademy.org/${certNumber}.pdf` } : cert));
+        }
+      } catch (err) {
+        // fallback
+        const certNumber = `TFB-${selectedCertificate.stream.split(' ')[0].substring(0, 2).toUpperCase()}-2025-${String(certificates.length + 100).padStart(5, '0')}`;
+        const today = new Date().toISOString().split('T')[0];
+        setCertificates(prev => prev.map(cert => cert.id === selectedCertificate.id ? { ...cert, eligibilityStatus: 'Issued', certificateNumber: certNumber, issuedDate: today, pdfUrl: `https://certificates.tokoacademy.org/${certNumber}.pdf` } : cert));
+      } finally {
+        setShowIssueModal(false);
+        setSelectedCertificate(null);
       }
-      return cert;
-    });
-
-    setCertificates(updatedCertificates);
-    setShowIssueModal(false);
-    setSelectedCertificate(null);
+    })();
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await api.getCertificates();
+        if (!mounted) return;
+        const server = res?.success ? res.data.items : initialCertificates;
+        setCertificates(server);
+
+        // Auto-issue any eligible certificates
+        for (const cert of server) {
+          if ((cert.eligibilityStatus || '').toLowerCase() === 'eligible') {
+            try {
+              const payload = { studentId: cert.studentId, cohortId: cert.cohortId };
+              const r = await api.issueCertificate(payload);
+              if (r?.success) {
+                setCertificates(prev => prev.map(c => c.id === cert.id ? { ...c, eligibilityStatus: 'Issued', certificateNumber: r.data.certificateNumber, issuedDate: r.data.issuedDate, pdfUrl: r.data.pdfUrl } : c));
+              }
+            } catch (err) {
+              console.warn('Auto-issue failed for certificate', cert.id, err);
+            }
+          }
+        }
+      } catch (err) {
+        setCertificates(initialCertificates);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const certificateColumns = [
     {

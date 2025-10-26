@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from 'react';
+import api, { setAuthToken, getAuthToken, removeAuthToken } from '../utils/api';
 
 const AuthContext = createContext();
 
@@ -11,49 +12,42 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }) {
-  const [adminUser, setAdminUser] = useState(null);
-
-  const login = (email, password) => {
-    if (email === 'daniel.okon@tokoacademy.org' && password === 'admin123') {
-      const user = {
-        id: 99,
-        name: 'Daniel Okon',
-        role: 'Program Director',
-        email: 'daniel.okon@tokoacademy.org',
-        phone: '+2348012345678',
-        assignedStreams: ['Web Development', 'AI Essentials'],
-        lastLogin: new Date().toISOString(),
-        location: 'Abuja, Nigeria',
-        isAdmin: true,
-      };
-      setAdminUser(user);
-      localStorage.setItem('adminUser', JSON.stringify(user));
-      return { success: true };
-    } else if (email === 'instructor@tokoacademy.org' && password === 'instructor123') {
-      const user = {
-        id: 100,
-        name: 'Chioma Nwosu',
-        role: 'Instructor',
-        email: 'instructor@tokoacademy.org',
-        phone: '+2348023456789',
-        assignedStreams: ['Data Analysis & Visualization'],
-        lastLogin: new Date().toISOString(),
-        location: 'Lagos, Nigeria',
-        isAdmin: false,
-      };
-      setAdminUser(user);
-      localStorage.setItem('adminUser', JSON.stringify(user));
-      return { success: true };
+  const [adminUser, setAdminUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('adminUser');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
     }
-    return { success: false, error: 'Invalid credentials' };
+  });
+
+  const login = async (email, password) => {
+    try {
+      const res = await api.login(email, password);
+      if (res && res.success && res.data) {
+        const { token, user } = res.data;
+        if (token) {
+          setAuthToken(token);
+        }
+        setAdminUser(user);
+        localStorage.setItem('adminUser', JSON.stringify(user));
+        return { success: true };
+      }
+      return { success: false, error: res?.error?.message || 'Invalid credentials' };
+    } catch (err) {
+      return { success: false, error: err.message || 'Login failed' };
+    }
   };
 
   const logout = () => {
     setAdminUser(null);
     localStorage.removeItem('adminUser');
+    removeAuthToken();
   };
 
   const checkAuth = () => {
+    const token = getAuthToken();
+    if (!token) return false;
     const stored = localStorage.getItem('adminUser');
     if (stored) {
       setAdminUser(JSON.parse(stored));

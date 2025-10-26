@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
 import PageHeader from '../components/layout/PageHeader';
 import Card from '../components/ui/Card';
@@ -10,6 +10,7 @@ import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
 import { streams as initialStreams, cohorts as initialCohorts } from '../data/mockData';
+import api from '../utils/api';
 
 export default function CohortsPage() {
   const [activeTab, setActiveTab] = useState('cohorts');
@@ -37,37 +38,54 @@ export default function CohortsPage() {
 
   const handleCreateStream = (e) => {
     e.preventDefault();
-    const stream = {
-      id: streams.length + 1,
-      ...newStream,
-      duration: parseInt(newStream.duration),
-    };
-    setStreams([...streams, stream]);
-    setShowStreamModal(false);
-    setNewStream({ name: '', description: '', duration: '', status: 'Active' });
+    (async () => {
+      try {
+        const payload = { ...newStream, duration: parseInt(newStream.duration) };
+        const res = await api.createStream(payload);
+        const created = res?.success ? res.data : { id: streams.length + 1, ...payload };
+        setStreams(prev => [...prev, created]);
+      } catch (err) {
+        setStreams(prev => [...prev, { id: prev.length + 1, ...newStream, duration: parseInt(newStream.duration) }]);
+      } finally {
+        setShowStreamModal(false);
+        setNewStream({ name: '', description: '', duration: '', status: 'Active' });
+      }
+    })();
   };
 
   const handleCreateCohort = (e) => {
     e.preventDefault();
-    const cohort = {
-      id: cohorts.length + 1,
-      ...newCohort,
-      studentsEnrolled: 0,
-      attendanceRate: 0,
-      avgProgress: 0,
-      certificateEligible: 0,
-    };
-    setCohorts([...cohorts, cohort]);
-    setShowCohortModal(false);
-    setNewCohort({
-      name: '',
-      stream: '',
-      leadInstructor: '',
-      startDate: '',
-      endDate: '',
-      status: 'Upcoming',
-    });
+    (async () => {
+      try {
+        const payload = { ...newCohort };
+        const res = await api.createCohort(payload);
+        const created = res?.success ? res.data : { id: cohorts.length + 1, ...payload, studentsEnrolled: 0, attendanceRate: 0, avgProgress: 0, certificateEligible: 0 };
+        setCohorts(prev => [...prev, created]);
+      } catch (err) {
+        setCohorts(prev => [...prev, { id: prev.length + 1, ...newCohort, studentsEnrolled: 0, attendanceRate: 0, avgProgress: 0, certificateEligible: 0 }]);
+      } finally {
+        setShowCohortModal(false);
+        setNewCohort({ name: '', stream: '', leadInstructor: '', startDate: '', endDate: '', status: 'Upcoming' });
+      }
+    })();
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [streamsRes, cohortsRes] = await Promise.all([api.getStreams(), api.getCohorts()]);
+        if (!mounted) return;
+        setStreams(streamsRes?.success ? streamsRes.data.items : initialStreams);
+        setCohorts(cohortsRes?.success ? cohortsRes.data.items : initialCohorts);
+      } catch (err) {
+        setStreams(initialStreams);
+        setCohorts(initialCohorts);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const streamColumns = [
     {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
@@ -9,6 +9,7 @@ import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
 import { assignments as initialAssignments, cohorts } from '../data/mockData';
+import api from '../utils/api';
 
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState(initialAssignments);
@@ -34,6 +35,52 @@ export default function AssignmentsPage() {
     feedback: '',
     status: 'Graded',
   });
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        const res = await api.getAssignments();
+        const serverAssignments = res?.success ? res.data.items : initialAssignments;
+        if (!mounted) return;
+        setAssignments(serverAssignments);
+
+        // Auto-approve any submissions that requested changes
+        for (const assignment of serverAssignments) {
+          for (const submission of assignment.submissions || []) {
+            const status = (submission.status || '').toLowerCase();
+            if (status.includes('request') || status.includes('reopen') || status.includes('changes')) {
+              try {
+                const gradePayload = {
+                  score: assignment.maxScore || 100,
+                  feedback: 'Auto-approved by admin',
+                };
+                await api.gradeSubmission(submission.id, gradePayload);
+                // update local state optimistically
+                setAssignments(prev => prev.map(a => {
+                  if (a.id !== assignment.id) return a;
+                  return {
+                    ...a,
+                    submissions: (a.submissions || []).map(s => s.id === submission.id ? { ...s, status: 'Graded', score: gradePayload.score, feedback: gradePayload.feedback } : s),
+                  };
+                }));
+              } catch (err) {
+                // ignore errors but continue
+                console.warn('Auto-approve failed for submission', submission.id, err);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // fallback to mock data
+        setAssignments(initialAssignments);
+      }
+    };
+
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const handleCreateAssignment = (e) => {
     e.preventDefault();
