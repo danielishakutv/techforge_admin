@@ -130,6 +130,38 @@ export default function CohortsPage() {
     })();
   };
 
+  const handleDeleteStream = async (id) => {
+    if (!window.confirm('Delete this stream? This cannot be undone.')) return;
+    try {
+      const resp = await api.deleteStream(id);
+      if (resp && resp.success) {
+        const sResp = await api.getStreams();
+        setStreams((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+        toast.success('Stream deleted');
+      } else {
+        toast.error(resp?.error || 'Failed to delete stream');
+      }
+    } catch (err) {
+      toast.error('Failed to delete stream');
+    }
+  };
+
+  const handleDeleteCohort = async (id) => {
+    if (!window.confirm('Delete this cohort? This cannot be undone.')) return;
+    try {
+      const resp = await api.deleteCohort(id);
+      if (resp && resp.success) {
+        const cResp = await api.getCohorts();
+        setCohorts((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
+        toast.success('Cohort deleted');
+      } else {
+        toast.error(resp?.error || 'Failed to delete cohort');
+      }
+    } catch (err) {
+      toast.error('Failed to delete cohort');
+    }
+  };
+
   const streamColumns = [
     {
       header: 'Title',
@@ -142,15 +174,27 @@ export default function CohortsPage() {
     {
       header: 'Actions',
       render: (row) => (
-        <button
-          className="text-sm text-primary-600 hover:text-primary-700"
-          onClick={() => {
-            setEditStream({ id: row.id, title: row.title || '', duration_weeks: row.duration_weeks || 0 });
-            setShowEditStreamModal(true);
-          }}
-        >
-          Edit
-        </button>
+        <div className="flex space-x-2">
+          <button
+            className="text-sm text-primary-600 hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditStream({ id: row.id, title: row.title || '', duration_weeks: row.duration_weeks || 0 });
+              setShowEditStreamModal(true);
+            }}
+          >
+            Edit
+          </button>
+          <button
+            className="text-sm text-red-600 hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteStream(row.id);
+            }}
+          >
+            Delete
+          </button>
+        </div>
       ),
     },
   ];
@@ -187,6 +231,20 @@ export default function CohortsPage() {
           : instructor.email;
         return name || instructor.email || '—';
       },
+    },
+    {
+      header: 'Actions',
+      render: (row) => (
+        <button
+          className="text-sm text-red-600 hover:underline"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteCohort(row.id);
+          }}
+        >
+          Delete
+        </button>
+      ),
     },
   ];
 
