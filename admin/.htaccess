@@ -1,0 +1,20 @@
+# Apache rewrite rules for SPA under /admin
+# Place this file at the root of the deployed /admin directory
+
+<IfModule mod_rewrite.c>
+  Options -MultiViews
+  RewriteEngine On
+  RewriteBase /admin/
+
+  # Serve existing files/directories directly
+  RewriteCond %{REQUEST_FILENAME} -s [OR]
+  RewriteCond %{REQUEST_FILENAME} -l [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Everything else routes to index.html
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Fallback for 404 to the SPA entry (in case mod_rewrite is unavailable)
+ErrorDocument 404 /admin/index.html

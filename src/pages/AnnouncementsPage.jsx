@@ -53,10 +53,10 @@ export default function AnnouncementsPage() {
     let mounted = true;
     async function load() {
       try {
-        const [aResp, sResp] = await Promise.all([api.getRecentAnnouncements().catch(() => null), api.getStreams().catch(() => null)]);
+  const [aResp, sResp] = await Promise.all([api.getRecentAnnouncements().catch(() => null), api.getStreams().catch(() => null)]);
         if (!mounted) return;
-        setAnnouncements((aResp && aResp.success && aResp.data.items) || []);
-        setStreams((sResp && sResp.success && sResp.data.items) || []);
+  setAnnouncements((aResp && aResp.success && aResp.data.items) || []);
+  setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
       } catch (err) {
         console.error('Failed to load announcements', err);
         setError(err.message || 'Failed to load announcements');
@@ -144,7 +144,7 @@ export default function AnnouncementsPage() {
                 label="Select Stream"
                 value={selectedStream}
                 onChange={(e) => setSelectedStream(e.target.value)}
-                options={streams.map(s => ({ value: s.name, label: s.name }))}
+                options={streams.map(s => ({ value: s.title, label: s.title }))}
                 placeholder="Choose a stream"
                 required
               />

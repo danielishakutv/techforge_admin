@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
-import PageHeader from '../components/layout/PageHeader';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
@@ -17,15 +16,37 @@ export default function CohortsPage() {
   const [cohorts, setCohorts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [instructors, setInstructors] = useState([]);
 
   useEffect(() => {
     let mounted = true;
     async function load() {
       try {
-        const [sResp, cResp] = await Promise.all([api.getStreams().catch(() => null), api.getCohorts().catch(() => null)]);
+        const [sResp, cResp, uResp] = await Promise.all([
+          api.getStreams().catch(() => null),
+          api.getCohorts().catch(() => null),
+          api.getInstructors().catch(() => null),
+        ]);
         if (!mounted) return;
-        setStreams((sResp && sResp.success && sResp.data.items) || []);
-        setCohorts((cResp && cResp.success && cResp.data.items) || []);
+        
+        alert('Cohorts Response: ' + JSON.stringify(cResp));
+        console.log('Cohorts API Response:', cResp);
+        console.log('Streams API Response:', sResp);
+        console.log('Instructors API Response:', uResp);
+        
+        setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
+        setCohorts(
+          Array.isArray(cResp)
+            ? cResp
+            : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : [])
+        );
+        setInstructors(
+          Array.isArray(uResp)
+            ? uResp
+            : ((uResp && uResp.success && Array.isArray(uResp.data)) ? uResp.data : [])
+        );
+        
+        console.log('Cohorts state set to:', Array.isArray(cResp) ? cResp : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []));
       } catch (err) {
         console.error('Failed to load cohorts/streams:', err);
         setError(err.message || 'Failed to load data');
@@ -39,35 +60,37 @@ export default function CohortsPage() {
   const [showStreamModal, setShowStreamModal] = useState(false);
   const [showCohortModal, setShowCohortModal] = useState(false);
   const [selectedCohort, setSelectedCohort] = useState(null);
+  const [showEditCohortModal, setShowEditCohortModal] = useState(false);
+  const [editCohort, setEditCohort] = useState(null);
   
   const [newStream, setNewStream] = useState({
-    name: '',
-    description: '',
-    duration: '',
-    status: 'Active',
+    title: '',
+    duration_weeks: '',
   });
+  const [editStream, setEditStream] = useState(null);
+  const [showEditStreamModal, setShowEditStreamModal] = useState(false);
 
   const [newCohort, setNewCohort] = useState({
-    name: '',
-    stream: '',
-    leadInstructor: '',
-    startDate: '',
-    endDate: '',
-    status: 'Upcoming',
+    cohort_name: '',
+    stream_id: '',
+    lead_instructor_id: '',
+    start_date: '',
+    end_date: '',
+    status: 'upcoming',
   });
 
   const handleCreateStream = (e) => {
     e.preventDefault();
     (async () => {
       try {
-        const payload = { ...newStream, duration: parseInt(newStream.duration || 0, 10) };
+        const payload = { title: newStream.title, duration_weeks: parseInt(newStream.duration_weeks || 0, 10) };
         const resp = await api.createStream(payload);
         if (resp && resp.success) {
           // refresh streams
           const sResp = await api.getStreams();
-          setStreams((sResp && sResp.success && sResp.data.items) || []);
+          setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
           setShowStreamModal(false);
-          setNewStream({ name: '', description: '', duration: '', status: 'Active' });
+          setNewStream({ title: '', duration_weeks: '' });
         } else {
           console.error('Create stream failed', resp && resp.error);
           alert('Failed to create stream');
@@ -83,13 +106,30 @@ export default function CohortsPage() {
     e.preventDefault();
     (async () => {
       try {
-        const payload = { ...newCohort };
+        const payload = {
+          cohort_name: newCohort.cohort_name,
+          stream_id: newCohort.stream_id ? parseInt(newCohort.stream_id, 10) : undefined,
+          start_date: newCohort.start_date,
+          status: (newCohort.status || '').toLowerCase(),
+          lead_instructor_id: newCohort.lead_instructor_id ? parseInt(newCohort.lead_instructor_id, 10) : undefined,
+        };
+        if (newCohort.end_date) {
+          payload.end_date = newCohort.end_date;
+        }
+        if (!payload.stream_id || !payload.cohort_name || !payload.start_date || !payload.lead_instructor_id) {
+          alert('Please fill all required fields');
+          return;
+        }
         const resp = await api.createCohort(payload);
         if (resp && resp.success) {
           const cResp = await api.getCohorts();
-          setCohorts((cResp && cResp.success && cResp.data.items) || []);
+          setCohorts(
+            Array.isArray(cResp)
+              ? cResp
+              : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : [])
+          );
           setShowCohortModal(false);
-          setNewCohort({ name: '', stream: '', leadInstructor: '', startDate: '', endDate: '', status: 'Upcoming' });
+          setNewCohort({ cohort_name: '', stream_id: '', lead_instructor_id: '', start_date: '', end_date: '', status: 'upcoming' });
         } else {
           console.error('Create cohort failed', resp && resp.error);
           alert('Failed to create cohort');
@@ -103,34 +143,44 @@ export default function CohortsPage() {
 
   const streamColumns = [
     {
-      header: 'Stream Name',
-      accessor: 'name',
+      header: 'Title',
+      accessor: 'title',
     },
     {
       header: 'Duration',
-      render: (row) => `${row.duration} weeks`,
+      render: (row) => `${row.duration_weeks} weeks`,
     },
     {
-      header: 'Status',
-      render: (row) => <StatusBadge status={row.status} />,
+      header: 'Actions',
+      render: (row) => (
+        <button
+          className="text-sm text-primary-600 hover:text-primary-700"
+          onClick={() => {
+            setEditStream({ id: row.id, title: row.title || '', duration_weeks: row.duration_weeks || 0 });
+            setShowEditStreamModal(true);
+          }}
+        >
+          Edit
+        </button>
+      ),
     },
   ];
 
   const cohortColumns = [
     {
       header: 'Cohort Name',
-      accessor: 'name',
+      accessor: 'cohort_name',
     },
     {
       header: 'Stream',
-      accessor: 'stream',
+      accessor: 'stream_title',
     },
     {
       header: 'Start / End Dates',
       render: (row) => (
         <div>
-          <p className="text-sm">{new Date(row.startDate).toLocaleDateString('en-NG')}</p>
-          <p className="text-xs text-gray-500">{new Date(row.endDate).toLocaleDateString('en-NG')}</p>
+          <p className="text-sm">{row.start_date ? new Date(row.start_date).toLocaleDateString('en-NG') : '—'}</p>
+          <p className="text-xs text-gray-500">{row.end_date ? new Date(row.end_date).toLocaleDateString('en-NG') : '—'}</p>
         </div>
       ),
     },
@@ -139,12 +189,15 @@ export default function CohortsPage() {
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
-      header: 'Students Enrolled',
-      accessor: 'studentsEnrolled',
-    },
-    {
       header: 'Lead Instructor',
-      accessor: 'leadInstructor',
+      render: (row) => {
+        const instructor = instructors.find(u => u.id === row.lead_instructor_id);
+        if (!instructor) return row.lead_instructor_id || '—';
+        const name = instructor.profile
+          ? [instructor.profile.first_name, instructor.profile.middle_name, instructor.profile.last_name].filter(Boolean).join(' ')
+          : instructor.email;
+        return name || instructor.email || '—';
+      },
     },
   ];
 
@@ -217,35 +270,18 @@ export default function CohortsPage() {
         >
           <form onSubmit={handleCreateStream} className="space-y-4">
             <LabeledInput
-              label="Stream Name"
-              value={newStream.name}
-              onChange={(e) => setNewStream({ ...newStream, name: e.target.value })}
-              placeholder="e.g. Web Development"
-              required
-            />
-            <LabeledTextarea
-              label="Description"
-              value={newStream.description}
-              onChange={(e) => setNewStream({ ...newStream, description: e.target.value })}
-              placeholder="Brief description of the stream"
+              label="Title"
+              value={newStream.title}
+              onChange={(e) => setNewStream({ ...newStream, title: e.target.value })}
+              placeholder="e.g. Full Stack"
               required
             />
             <LabeledInput
               label="Duration (weeks)"
               type="number"
-              value={newStream.duration}
-              onChange={(e) => setNewStream({ ...newStream, duration: e.target.value })}
+              value={newStream.duration_weeks}
+              onChange={(e) => setNewStream({ ...newStream, duration_weeks: e.target.value })}
               placeholder="8"
-              required
-            />
-            <LabeledSelect
-              label="Status"
-              value={newStream.status}
-              onChange={(e) => setNewStream({ ...newStream, status: e.target.value })}
-              options={[
-                { value: 'Active', label: 'Active' },
-                { value: 'Paused', label: 'Paused' },
-              ]}
               required
             />
             <div className="flex justify-end space-x-3 pt-4">
@@ -266,6 +302,72 @@ export default function CohortsPage() {
           </form>
         </Modal>
 
+        {/* Edit Stream Modal */}
+        <Modal
+          isOpen={showEditStreamModal}
+          onClose={() => setShowEditStreamModal(false)}
+          title="Edit Stream"
+        >
+          {editStream && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                (async () => {
+                  try {
+                    const payload = {
+                      title: editStream.title,
+                      duration_weeks: parseInt(editStream.duration_weeks || 0, 10),
+                    };
+                    const resp = await api.updateStream(editStream.id, payload);
+                    if (resp && resp.success) {
+                      const sResp = await api.getStreams();
+                      setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
+                      setShowEditStreamModal(false);
+                      setEditStream(null);
+                    } else {
+                      console.error('Update stream failed', resp && resp.error);
+                      alert('Failed to update stream');
+                    }
+                  } catch (err) {
+                    console.error('Update stream error', err);
+                    alert('Failed to update stream');
+                  }
+                })();
+              }}
+              className="space-y-4"
+            >
+              <LabeledInput
+                label="Title"
+                value={editStream.title}
+                onChange={(e) => setEditStream({ ...editStream, title: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="Duration (weeks)"
+                type="number"
+                value={editStream.duration_weeks}
+                onChange={(e) => setEditStream({ ...editStream, duration_weeks: e.target.value })}
+                required
+              />
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEditStreamModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+
         <Modal
           isOpen={showCohortModal}
           onClose={() => setShowCohortModal(false)}
@@ -274,43 +376,42 @@ export default function CohortsPage() {
           <form onSubmit={handleCreateCohort} className="space-y-4">
             <LabeledInput
               label="Cohort Name"
-              value={newCohort.name}
-              onChange={(e) => setNewCohort({ ...newCohort, name: e.target.value })}
-              placeholder="e.g. Cohort 14"
+              value={newCohort.cohort_name}
+              onChange={(e) => setNewCohort({ ...newCohort, cohort_name: e.target.value })}
+              placeholder="e.g. FS Oct 2025"
               required
             />
             <LabeledSelect
               label="Assign Stream"
-              value={newCohort.stream}
-              onChange={(e) => setNewCohort({ ...newCohort, stream: e.target.value })}
-              options={streams.map(s => ({ value: s.name, label: s.name }))}
+              value={newCohort.stream_id}
+              onChange={(e) => setNewCohort({ ...newCohort, stream_id: e.target.value })}
+              options={streams.map(s => ({ value: s.id, label: s.title }))}
               placeholder="Select a stream"
               required
             />
             <LabeledSelect
               label="Lead Instructor"
-              value={newCohort.leadInstructor}
-              onChange={(e) => setNewCohort({ ...newCohort, leadInstructor: e.target.value })}
-              options={[
-                { value: 'Daniel Okon', label: 'Daniel Okon' },
-                { value: 'Emeka Adeyemi', label: 'Emeka Adeyemi' },
-                { value: 'Chioma Nwosu', label: 'Chioma Nwosu' },
-              ]}
+              value={newCohort.lead_instructor_id}
+              onChange={(e) => setNewCohort({ ...newCohort, lead_instructor_id: e.target.value })}
+              options={instructors.map(u => ({
+                value: u.id,
+                label: u.profile ? [u.profile.first_name, u.profile.middle_name, u.profile.last_name].filter(Boolean).join(' ') || u.email : u.email,
+              }))}
               placeholder="Select instructor"
               required
             />
             <LabeledInput
               label="Start Date"
               type="date"
-              value={newCohort.startDate}
-              onChange={(e) => setNewCohort({ ...newCohort, startDate: e.target.value })}
+              value={newCohort.start_date}
+              onChange={(e) => setNewCohort({ ...newCohort, start_date: e.target.value })}
               required
             />
             <LabeledInput
               label="End Date"
               type="date"
-              value={newCohort.endDate}
-              onChange={(e) => setNewCohort({ ...newCohort, endDate: e.target.value })}
+              value={newCohort.end_date}
+              onChange={(e) => setNewCohort({ ...newCohort, end_date: e.target.value })}
               required
             />
             <LabeledSelect
@@ -318,9 +419,9 @@ export default function CohortsPage() {
               value={newCohort.status}
               onChange={(e) => setNewCohort({ ...newCohort, status: e.target.value })}
               options={[
-                { value: 'Upcoming', label: 'Upcoming' },
-                { value: 'Ongoing', label: 'Ongoing' },
-                { value: 'Completed', label: 'Completed' },
+                { value: 'upcoming', label: 'Upcoming' },
+                { value: 'ongoing', label: 'Ongoing' },
+                { value: 'completed', label: 'Completed' },
               ]}
               required
             />
@@ -342,18 +443,140 @@ export default function CohortsPage() {
           </form>
         </Modal>
 
+        {/* Edit Cohort Modal */}
+        <Modal
+          isOpen={showEditCohortModal}
+          onClose={() => setShowEditCohortModal(false)}
+          title="Edit Cohort"
+        >
+          {editCohort && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                (async () => {
+                  try {
+                    const payload = {
+                      cohort_name: editCohort.cohort_name,
+                      stream_id: editCohort.stream_id ? parseInt(editCohort.stream_id, 10) : undefined,
+                      start_date: editCohort.start_date,
+                      status: (editCohort.status || '').toLowerCase(),
+                      lead_instructor_id: editCohort.lead_instructor_id ? parseInt(editCohort.lead_instructor_id, 10) : undefined,
+                    };
+                    if (editCohort.end_date) {
+                      payload.end_date = editCohort.end_date;
+                    }
+                    const resp = await api.updateCohort(editCohort.id, payload);
+                    if (resp && resp.success) {
+                      const cResp = await api.getCohorts();
+                      setCohorts(
+                        Array.isArray(cResp)
+                          ? cResp
+                          : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : [])
+                      );
+                      setShowEditCohortModal(false);
+                      setEditCohort(null);
+                    } else {
+                      console.error('Update cohort failed', resp && resp.error);
+                      alert('Failed to update cohort');
+                    }
+                  } catch (err) {
+                    console.error('Update cohort error', err);
+                    alert('Failed to update cohort');
+                  }
+                })();
+              }}
+              className="space-y-4"
+            >
+              <LabeledInput
+                label="Cohort Name"
+                value={editCohort.cohort_name}
+                onChange={(e) => setEditCohort({ ...editCohort, cohort_name: e.target.value })}
+                required
+              />
+              <LabeledSelect
+                label="Assign Stream"
+                value={editCohort.stream_id}
+                onChange={(e) => setEditCohort({ ...editCohort, stream_id: e.target.value })}
+                options={streams.map(s => ({ value: s.id, label: s.title }))}
+                placeholder="Select a stream"
+                required
+              />
+              <LabeledSelect
+                label="Lead Instructor"
+                value={editCohort.lead_instructor_id}
+                onChange={(e) => setEditCohort({ ...editCohort, lead_instructor_id: e.target.value })}
+                options={instructors.map(u => ({
+                  value: u.id,
+                  label: u.profile ? [u.profile.first_name, u.profile.middle_name, u.profile.last_name].filter(Boolean).join(' ') || u.email : u.email,
+                }))}
+                placeholder="Select instructor"
+                required
+              />
+              <LabeledInput
+                label="Start Date"
+                type="date"
+                value={editCohort.start_date}
+                onChange={(e) => setEditCohort({ ...editCohort, start_date: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="End Date"
+                type="date"
+                value={editCohort.end_date}
+                onChange={(e) => setEditCohort({ ...editCohort, end_date: e.target.value })}
+              />
+              <LabeledSelect
+                label="Status"
+                value={editCohort.status}
+                onChange={(e) => setEditCohort({ ...editCohort, status: e.target.value })}
+                options={[
+                  { value: 'upcoming', label: 'Upcoming' },
+                  { value: 'ongoing', label: 'Ongoing' },
+                  { value: 'completed', label: 'Completed' },
+                ]}
+                required
+              />
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCohortModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+
         <Drawer
           isOpen={selectedCohort !== null}
           onClose={() => setSelectedCohort(null)}
-          title={selectedCohort?.name || ''}
+          title={selectedCohort?.cohort_name || ''}
         >
           {selectedCohort && (
             <div className="space-y-6">
               <div>
                 <h4 className="text-sm font-medium text-gray-500 mb-2">Summary</h4>
                 <div className="space-y-2">
-                  <p className="text-sm"><span className="font-medium">Stream:</span> {selectedCohort.stream}</p>
-                  <p className="text-sm"><span className="font-medium">Lead Instructor:</span> {selectedCohort.leadInstructor}</p>
+                  <p className="text-sm"><span className="font-medium">Stream:</span> {selectedCohort.stream_title || '—'}</p>
+                  <p className="text-sm">
+                    <span className="font-medium">Lead Instructor:</span>{' '}
+                    {(() => {
+                      const instructor = instructors.find(u => u.id === selectedCohort.lead_instructor_id);
+                      if (!instructor) return selectedCohort.lead_instructor_id || '—';
+                      const name = instructor.profile
+                        ? [instructor.profile.first_name, instructor.profile.middle_name, instructor.profile.last_name].filter(Boolean).join(' ')
+                        : instructor.email;
+                      return name || instructor.email || '—';
+                    })()}
+                  </p>
                   <p className="text-sm"><span className="font-medium">Status:</span> <StatusBadge status={selectedCohort.status} /></p>
                 </div>
               </div>
@@ -362,38 +585,31 @@ export default function CohortsPage() {
                 <h4 className="text-sm font-medium text-gray-500 mb-2">Dates</h4>
                 <div className="space-y-2">
                   <p className="text-sm">
-                    <span className="font-medium">Start:</span> {new Date(selectedCohort.startDate).toLocaleDateString('en-NG', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    <span className="font-medium">Start:</span> {selectedCohort.start_date || '—'}
                   </p>
                   <p className="text-sm">
-                    <span className="font-medium">End:</span> {new Date(selectedCohort.endDate).toLocaleDateString('en-NG', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    <span className="font-medium">End:</span> {selectedCohort.end_date || '—'}
                   </p>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Quick Stats</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-xs text-gray-600">Attendance Rate</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{Math.round(selectedCohort.attendanceRate * 100)}%</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-xs text-gray-600">Avg Progress</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{selectedCohort.avgProgress}%</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-xs text-gray-600">Students Enrolled</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{selectedCohort.studentsEnrolled}</p>
-                  </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-xs text-gray-600">Certificate Eligible</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{selectedCohort.certificateEligible}%</p>
-                  </div>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-gray-200">
-                <button className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">
+                <button
+                  onClick={() => {
+                    setEditCohort({
+                      id: selectedCohort.id,
+                      cohort_name: selectedCohort.cohort_name || '',
+                      stream_id: selectedCohort.stream_id || '',
+                      lead_instructor_id: selectedCohort.lead_instructor_id || '',
+                      start_date: selectedCohort.start_date || '',
+                      end_date: selectedCohort.end_date || '',
+                      status: selectedCohort.status || 'upcoming',
+                    });
+                    setShowEditCohortModal(true);
+                    setSelectedCohort(null);
+                  }}
+                  className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+                >
                   Edit Cohort Details
                 </button>
               </div>

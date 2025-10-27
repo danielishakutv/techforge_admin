@@ -77,6 +77,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  updateStream: (id, data) => apiRequest(`/admin/streams/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
 
   // Cohorts
   getCohorts: () => apiRequest('/admin/cohorts'),
@@ -86,7 +90,7 @@ export const api = {
   }),
   getCohort: (id) => apiRequest(`/admin/cohorts/${id}`),
   updateCohort: (id, data) => apiRequest(`/admin/cohorts/${id}`, {
-    method: 'PATCH',
+    method: 'PUT',
     body: JSON.stringify(data),
   }),
 
@@ -118,6 +122,17 @@ export const api = {
   getStudents: () => apiRequest('/admin/students'),
   getStudent: (id) => apiRequest(`/admin/students/${id}`),
   updateStudent: (id, data) => apiRequest(`/admin/students/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+
+  // Users (Instructors)
+  getInstructors: () => apiRequest('/admin/users?role=instructor'),
+
+  // Current user / profile
+  // NOTE: backend may expose a 'me' endpoint. Adjust path if your API differs.
+  getProfile: () => apiRequest('/auth/me'),
+  updateProfile: (data) => apiRequest('/admin/profile', {
     method: 'PATCH',
     body: JSON.stringify(data),
   }),

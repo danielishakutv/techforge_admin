@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-export default function TopBar({ pageTitle }) {
+export default function TopBar({ pageTitle, onMenuClick }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const { adminUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -13,18 +13,28 @@ export default function TopBar({ pageTitle }) {
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 px-8 py-4">
+    <header className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{pageTitle}</h2>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+            onClick={onMenuClick}
+            aria-label="Open sidebar"
+          >
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{pageTitle}</h2>
         </div>
 
         <div className="flex items-center space-x-4">
-          <div className="relative">
+          <div className="relative hidden sm:block">
             <input
               type="search"
               placeholder="Search..."
-              className="w-64 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-56 lg:w-64 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
             <svg
               className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -48,12 +58,16 @@ export default function TopBar({ pageTitle }) {
               onClick={() => setShowDropdown(!showDropdown)}
               className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 transition"
             >
-              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-semibold text-sm">
-                  {adminUser?.name?.split(' ').map(n => n[0]).join('')}
-                </span>
-              </div>
-              <div className="text-left">
+              {adminUser?.avatar ? (
+                <img src={adminUser.avatar} alt={adminUser?.name || 'User avatar'} className="w-10 h-10 rounded-full object-cover" />
+              ) : (
+                <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
+                  <span className="text-white font-semibold text-sm">
+                    {adminUser?.name?.split(' ').map(n => n[0]).join('')}
+                  </span>
+                </div>
+              )}
+              <div className="text-left hidden xs:block">
                 <p className="text-sm font-medium text-gray-900">{adminUser?.name}</p>
                 <p className="text-xs text-gray-500">{adminUser?.role}</p>
               </div>

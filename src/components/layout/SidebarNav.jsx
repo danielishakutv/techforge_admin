@@ -85,11 +85,11 @@ const navigation = [
   },
 ];
 
-export default function SidebarNav() {
+export default function SidebarNav({ embedded = false, onNavigate }) {
   const location = useLocation();
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col">
+    <aside className={`${embedded ? '' : 'fixed left-0 top-0 h-screen'} w-64 bg-white border-r border-gray-200 flex flex-col`}>
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center space-x-2">
           <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
@@ -114,6 +114,7 @@ export default function SidebarNav() {
                   ? 'bg-primary-50 text-primary-700 font-medium'
                   : 'text-gray-700 hover:bg-gray-50'
               }`}
+              onClick={() => onNavigate && onNavigate()}
             >
               {item.icon}
               <span className="text-sm">{item.name}</span>
