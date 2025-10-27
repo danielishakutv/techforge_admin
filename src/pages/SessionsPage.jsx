@@ -42,7 +42,7 @@ export default function SessionsPage() {
         };
         const resp = await api.createSession(payload);
         if (resp && resp.success) {
-          const sResp = await api.getSessions();
+          const sResp = await api.getSessions({ cohort_id: payload.cohort_id });
           setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
           setShowCreateModal(false);
           setNewSession({ cohort_id: '', title: '', delivery_mode: 'online', start_datetime: '', end_datetime: '', instructor_id: '' });
@@ -68,7 +68,7 @@ export default function SessionsPage() {
         };
         const resp = await api.updateSession(editSession.id, payload);
         if (resp && resp.success) {
-          const sResp = await api.getSessions();
+          const sResp = await api.getSessions({ cohort_id: editSession.cohort_id });
           setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
           setShowEditModal(false);
           setEditSession(null);
@@ -82,12 +82,12 @@ export default function SessionsPage() {
     })();
   };
 
-  const handleDeleteSession = async (id) => {
+  const handleDeleteSession = async (id, cohortId) => {
     if (!window.confirm('Delete this session?')) return;
     try {
       const resp = await api.deleteSession(id);
       if (resp && resp.success) {
-        const sResp = await api.getSessions();
+        const sResp = await api.getSessions(cohortId ? { cohort_id: cohortId } : {});
         setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
         toast.success('Session deleted');
       } else {
@@ -102,17 +102,26 @@ export default function SessionsPage() {
     let mounted = true;
     async function load() {
       try {
-        const [sResp, cResp, iResp, stResp] = await Promise.all([
-          api.getSessions().catch(() => null),
+        // Load cohorts/instructors/streams first
+        const [cResp, iResp, stResp] = await Promise.all([
           api.getCohorts().catch(() => null),
           api.getInstructors().catch(() => null),
           api.getStreams().catch(() => null)
         ]);
         if (!mounted) return;
-        setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
-        setCohorts((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
+        const cData = (cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : [];
+        setCohorts(cData);
         setInstructors((iResp && iResp.success && Array.isArray(iResp.data)) ? iResp.data : []);
         setStreams((stResp && stResp.success && Array.isArray(stResp.data)) ? stResp.data : []);
+
+        // Refresh sessions only when we have a cohort_id to query with
+        if (cData.length > 0) {
+          const defaultCohortId = cData[0].id;
+          const sResp = await api.getSessions({ cohort_id: defaultCohortId }).catch(() => null);
+          setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+        } else {
+          setSessions([]);
+        }
       } catch (err) {
         console.error('Failed to load sessions page data', err);
         toast.error('Failed to load sessions');
@@ -144,7 +153,7 @@ export default function SessionsPage() {
       render: (row) => (
         <div className="flex space-x-2">
           <button onClick={(e) => { e.stopPropagation(); setEditSession(row); setShowEditModal(true); }} className="text-sm text-primary-600 hover:underline">Edit</button>
-          <button onClick={(e) => { e.stopPropagation(); handleDeleteSession(row.id); }} className="text-sm text-red-600 hover:underline">Delete</button>
+          <button onClick={(e) => { e.stopPropagation(); handleDeleteSession(row.id, row.cohort_id); }} className="text-sm text-red-600 hover:underline">Delete</button>
         </div>
       ),
     },
