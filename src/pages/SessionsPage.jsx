@@ -3,34 +3,27 @@ import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
-import Drawer from '../components/ui/Drawer';
 import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
-import LabeledTextarea from '../components/ui/LabeledTextarea';
 import api from '../utils/api';
+import { toast } from 'react-toastify';
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedSession, setSelectedSession] = useState(null);
-  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
-  const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [cohorts, setCohorts] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [instructors, setInstructors] = useState([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editSession, setEditSession] = useState(null);
 
   const [newSession, setNewSession] = useState({
-    cohortId: '',
-    topic: '',
-    description: '',
-    instructor: '',
-    deliveryMode: 'Online',
-    date: '',
-    time: '',
-    meetingLink: '',
-    venue: '',
+    cohort_id: '',
+    title: '',
+    delivery_mode: 'online',
+    start_datetime: '',
+    end_datetime: '',
+    instructor_id: '',
   });
 
   const handleCreateSession = (e) => {
@@ -38,76 +31,86 @@ export default function SessionsPage() {
     (async () => {
       try {
         const payload = {
-          cohortId: parseInt(newSession.cohortId, 10),
-          topic: newSession.topic,
-          description: newSession.description,
-          instructor: newSession.instructor,
-          deliveryMode: newSession.deliveryMode,
-          date: new Date(`${newSession.date}T${newSession.time}:00+01:00`).toISOString(),
-          meetingLink: newSession.deliveryMode === 'Online' ? newSession.meetingLink : null,
-          venue: newSession.deliveryMode === 'Physical' ? newSession.venue : null,
+          cohort_id: parseInt(newSession.cohort_id, 10),
+          title: newSession.title,
+          delivery_mode: newSession.delivery_mode,
+          start_datetime: newSession.start_datetime,
+          end_datetime: newSession.end_datetime,
+          instructor_id: parseInt(newSession.instructor_id, 10),
         };
         const resp = await api.createSession(payload);
         if (resp && resp.success) {
           const sResp = await api.getSessions();
-          setSessions((sResp && sResp.success && sResp.data.items) || []);
+          setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
           setShowCreateModal(false);
-          setNewSession({ cohortId: '', topic: '', description: '', instructor: '', deliveryMode: 'Online', date: '', time: '', meetingLink: '', venue: '' });
+          setNewSession({ cohort_id: '', title: '', delivery_mode: 'online', start_datetime: '', end_datetime: '', instructor_id: '' });
+          toast.success('Session created successfully');
         } else {
-          console.error('Failed to create session', resp && resp.error);
-          alert('Failed to create session');
+          console.error('Create session failed', resp && resp.error);
+          toast.error(resp?.error || 'Failed to create session');
         }
       } catch (err) {
         console.error('Create session error', err);
-        alert('Failed to create session');
+        toast.error('Failed to create session: ' + (err.message || 'Unknown error'));
       }
     })();
   };
 
-  const handleOpenAttendance = () => {
-    const cohortStudents = students.filter(s => s.cohortId === selectedSession.cohortId);
-    const records = cohortStudents.map(student => ({ studentId: student.id, studentName: student.name, status: 'Present' }));
-    setAttendanceRecords(records);
-    setShowAttendanceModal(true);
-  };
-
-  const handleSaveAttendance = () => {
+  const handleUpdateSession = () => {
     (async () => {
       try {
-        const resp = await api.markAttendance({
-          sessionId: selectedSession.id,
-          records: attendanceRecords,
-        });
+        const payload = {
+          title: editSession.title,
+          start_datetime: editSession.start_datetime,
+        };
+        const resp = await api.updateSession(editSession.id, payload);
         if (resp && resp.success) {
           const sResp = await api.getSessions();
-          setSessions((sResp && sResp.success && sResp.data.items) || []);
-          setSelectedSession(null);
-          setShowAttendanceModal(false);
+          setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+          setShowEditModal(false);
+          setEditSession(null);
+          toast.success('Session updated successfully');
         } else {
-          console.error('Failed to save attendance', resp && resp.error);
-          alert('Failed to save attendance');
+          toast.error(resp?.error || 'Failed to update session');
         }
       } catch (err) {
-        console.error('Save attendance error', err);
-        alert('Failed to save attendance');
+        toast.error('Failed to update session');
       }
     })();
+  };
+
+  const handleDeleteSession = async (id) => {
+    if (!window.confirm('Delete this session?')) return;
+    try {
+      const resp = await api.deleteSession(id);
+      if (resp && resp.success) {
+        const sResp = await api.getSessions();
+        setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+        toast.success('Session deleted');
+      } else {
+        toast.error(resp?.error || 'Failed to delete session');
+      }
+    } catch (err) {
+      toast.error('Failed to delete session');
+    }
   };
 
   useEffect(() => {
     let mounted = true;
     async function load() {
       try {
-        const [sResp, cResp, stResp] = await Promise.all([api.getSessions().catch(() => null), api.getCohorts().catch(() => null), api.getStudents().catch(() => null)]);
+        const [sResp, cResp, iResp] = await Promise.all([
+          api.getSessions().catch(() => null),
+          api.getCohorts().catch(() => null),
+          api.getInstructors().catch(() => null)
+        ]);
         if (!mounted) return;
-        setSessions((sResp && sResp.success && sResp.data.items) || []);
-        setCohorts((cResp && cResp.success && cResp.data.items) || []);
-        setStudents((stResp && stResp.success && stResp.data.items) || []);
+        setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+        setCohorts((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
+        setInstructors((iResp && iResp.success && Array.isArray(iResp.data)) ? iResp.data : []);
       } catch (err) {
         console.error('Failed to load sessions page data', err);
-        setError(err.message || 'Failed to load data');
-      } finally {
-        if (mounted) setLoading(false);
+        toast.error('Failed to load sessions');
       }
     }
     load();
@@ -115,46 +118,20 @@ export default function SessionsPage() {
   }, []);
 
   const sessionColumns = [
+    { header: 'Title', accessor: 'title' },
+    { header: 'Cohort ID', accessor: 'cohort_id' },
+    { header: 'Start', render: (row) => row.start_datetime ? new Date(row.start_datetime).toLocaleString('en-NG') : '—' },
+    { header: 'End', render: (row) => row.end_datetime ? new Date(row.end_datetime).toLocaleString('en-NG') : '—' },
+    { header: 'Delivery', render: (row) => <StatusBadge status={row.delivery_mode} /> },
+    { header: 'Instructor ID', accessor: 'instructor_id' },
     {
-      header: 'Date & Time',
-      render: (row) => {
-        const date = new Date(row.date);
-        return (
-          <div>
-            <p className="font-medium">
-              {date.toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </p>
-            <p className="text-xs text-gray-500">
-              {date.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })} WAT
-            </p>
-          </div>
-        );
-      },
-    },
-    {
-      header: 'Topic',
-      accessor: 'topic',
-    },
-    {
-      header: 'Cohort',
+      header: 'Actions',
       render: (row) => (
-        <div>
-          <p className="font-medium">{row.cohort}</p>
-          <p className="text-xs text-gray-500">{row.stream}</p>
+        <div className="flex space-x-2">
+          <button onClick={(e) => { e.stopPropagation(); setEditSession(row); setShowEditModal(true); }} className="text-sm text-primary-600 hover:underline">Edit</button>
+          <button onClick={(e) => { e.stopPropagation(); handleDeleteSession(row.id); }} className="text-sm text-red-600 hover:underline">Delete</button>
         </div>
       ),
-    },
-    {
-      header: 'Instructor',
-      accessor: 'instructor',
-    },
-    {
-      header: 'Delivery Mode',
-      render: (row) => <StatusBadge status={row.deliveryMode} />,
-    },
-    {
-      header: 'Status',
-      render: (row) => <StatusBadge status={row.status} />,
     },
   ];
 
@@ -171,11 +148,7 @@ export default function SessionsPage() {
               Schedule New Session
             </button>
           </div>
-          <DataTable
-            columns={sessionColumns}
-            data={sessions}
-            onRowClick={(session) => setSelectedSession(session)}
-          />
+          <DataTable columns={sessionColumns} data={sessions} />
         </Card>
 
         <Modal
@@ -187,84 +160,55 @@ export default function SessionsPage() {
           <form onSubmit={handleCreateSession} className="space-y-4">
             <LabeledSelect
               label="Cohort"
-              value={newSession.cohortId}
-              onChange={(e) => setNewSession({ ...newSession, cohortId: e.target.value })}
-              options={cohorts.map(c => ({ value: c.id.toString(), label: `${c.name} · ${c.stream}` }))}
+              value={newSession.cohort_id}
+              onChange={(e) => setNewSession({ ...newSession, cohort_id: e.target.value })}
+              options={cohorts.map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
               placeholder="Select a cohort"
               required
             />
             <LabeledInput
-              label="Topic / Title"
-              value={newSession.topic}
-              onChange={(e) => setNewSession({ ...newSession, topic: e.target.value })}
-              placeholder="e.g. HTML & CSS Foundations"
-              required
-            />
-            <LabeledTextarea
-              label="Description / Agenda"
-              value={newSession.description}
-              onChange={(e) => setNewSession({ ...newSession, description: e.target.value })}
-              placeholder="What will be covered in this session?"
-              required
-            />
-            <LabeledSelect
-              label="Instructor"
-              value={newSession.instructor}
-              onChange={(e) => setNewSession({ ...newSession, instructor: e.target.value })}
-              options={[
-                { value: 'Daniel Okon', label: 'Daniel Okon' },
-                { value: 'Emeka Adeyemi', label: 'Emeka Adeyemi' },
-                { value: 'Chioma Nwosu', label: 'Chioma Nwosu' },
-              ]}
-              placeholder="Select instructor"
+              label="Title"
+              value={newSession.title}
+              onChange={(e) => setNewSession({ ...newSession, title: e.target.value })}
+              placeholder="e.g. Intro to JS"
               required
             />
             <LabeledSelect
               label="Delivery Mode"
-              value={newSession.deliveryMode}
-              onChange={(e) => setNewSession({ ...newSession, deliveryMode: e.target.value })}
+              value={newSession.delivery_mode}
+              onChange={(e) => setNewSession({ ...newSession, delivery_mode: e.target.value })}
               options={[
-                { value: 'Online', label: 'Online' },
-                { value: 'Physical', label: 'Physical' },
-                { value: 'Recording', label: 'Recording' },
+                { value: 'online', label: 'Online' },
+                { value: 'physical', label: 'Physical' },
+                { value: 'hybrid', label: 'Hybrid' },
               ]}
               required
             />
-            <div className="grid grid-cols-2 gap-4">
-              <LabeledInput
-                label="Start Date"
-                type="date"
-                value={newSession.date}
-                onChange={(e) => setNewSession({ ...newSession, date: e.target.value })}
-                required
-              />
-              <LabeledInput
-                label="Start Time"
-                type="time"
-                value={newSession.time}
-                onChange={(e) => setNewSession({ ...newSession, time: e.target.value })}
-                required
-              />
-            </div>
-            {newSession.deliveryMode === 'Online' && (
-              <LabeledInput
-                label="Meeting Link"
-                type="url"
-                value={newSession.meetingLink}
-                onChange={(e) => setNewSession({ ...newSession, meetingLink: e.target.value })}
-                placeholder="https://zoom.us/j/..."
-                required
-              />
-            )}
-            {newSession.deliveryMode === 'Physical' && (
-              <LabeledInput
-                label="Venue"
-                value={newSession.venue}
-                onChange={(e) => setNewSession({ ...newSession, venue: e.target.value })}
-                placeholder="e.g. Toko Academy Hub, Victoria Island, Lagos"
-                required
-              />
-            )}
+            <LabeledInput
+              label="Start Date & Time"
+              type="datetime-local"
+              value={newSession.start_datetime}
+              onChange={(e) => setNewSession({ ...newSession, start_datetime: e.target.value })}
+              required
+            />
+            <LabeledInput
+              label="End Date & Time"
+              type="datetime-local"
+              value={newSession.end_datetime}
+              onChange={(e) => setNewSession({ ...newSession, end_datetime: e.target.value })}
+              required
+            />
+            <LabeledSelect
+              label="Instructor"
+              value={newSession.instructor_id}
+              onChange={(e) => setNewSession({ ...newSession, instructor_id: e.target.value })}
+              options={instructors.map(u => ({
+                value: u.id.toString(),
+                label: u.profile ? [u.profile.first_name, u.profile.middle_name, u.profile.last_name].filter(Boolean).join(' ') || u.email : u.email,
+              }))}
+              placeholder="Select instructor"
+              required
+            />
             <div className="flex justify-end space-x-3 pt-4">
               <button
                 type="button"
@@ -283,111 +227,32 @@ export default function SessionsPage() {
           </form>
         </Modal>
 
-        <Drawer
-          isOpen={selectedSession !== null}
-          onClose={() => setSelectedSession(null)}
-          title={selectedSession?.topic || ''}
+        <Modal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          title="Edit Session"
         >
-          {selectedSession && (
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-2">Session Details</h4>
-                <div className="space-y-2">
-                  <p className="text-sm"><span className="font-medium">Date & Time:</span> {new Date(selectedSession.date).toLocaleString('en-NG', { dateStyle: 'long', timeStyle: 'short' })} WAT</p>
-                  <p className="text-sm"><span className="font-medium">Cohort:</span> {selectedSession.cohort} · {selectedSession.stream}</p>
-                  <p className="text-sm"><span className="font-medium">Instructor:</span> {selectedSession.instructor}</p>
-                  <p className="text-sm"><span className="font-medium">Delivery Mode:</span> <StatusBadge status={selectedSession.deliveryMode} /></p>
-                  {selectedSession.meetingLink && (
-                    <p className="text-sm"><span className="font-medium">Meeting Link:</span> <a href={selectedSession.meetingLink} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">{selectedSession.meetingLink}</a></p>
-                  )}
-                  {selectedSession.venue && (
-                    <p className="text-sm"><span className="font-medium">Venue:</span> {selectedSession.venue}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-2">Description</h4>
-                <p className="text-sm text-gray-700">{selectedSession.description}</p>
-              </div>
-
-              {selectedSession.attendance && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-500 mb-3">Attendance Summary</h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-green-50 p-3 rounded-lg">
-                      <p className="text-xs text-green-700">Present</p>
-                      <p className="text-2xl font-bold text-green-900 mt-1">{selectedSession.attendance.present}</p>
-                    </div>
-                    <div className="bg-yellow-50 p-3 rounded-lg">
-                      <p className="text-xs text-yellow-700">Late</p>
-                      <p className="text-2xl font-bold text-yellow-900 mt-1">{selectedSession.attendance.late}</p>
-                    </div>
-                    <div className="bg-red-50 p-3 rounded-lg">
-                      <p className="text-xs text-red-700">Absent</p>
-                      <p className="text-2xl font-bold text-red-900 mt-1">{selectedSession.attendance.absent}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-4 border-t border-gray-200">
-                <button
-                  onClick={handleOpenAttendance}
-                  className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-                >
-                  {selectedSession.attendance ? 'Update Attendance' : 'Mark Attendance'}
-                </button>
+          {editSession && (
+            <div className="space-y-4">
+              <LabeledInput
+                label="Title"
+                value={editSession.title}
+                onChange={(e) => setEditSession({ ...editSession, title: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="Start Date & Time"
+                type="datetime-local"
+                value={editSession.start_datetime}
+                onChange={(e) => setEditSession({ ...editSession, start_datetime: e.target.value })}
+                required
+              />
+              <div className="flex justify-end space-x-3 pt-4">
+                <button onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium">Cancel</button>
+                <button onClick={handleUpdateSession} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">Save Changes</button>
               </div>
             </div>
           )}
-        </Drawer>
-
-        <Modal
-          isOpen={showAttendanceModal}
-          onClose={() => setShowAttendanceModal(false)}
-          title="Mark Attendance"
-          size="lg"
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Mark attendance for {selectedSession?.cohort} · {selectedSession?.topic}
-            </p>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {attendanceRecords.map((record, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium">{record.studentName}</span>
-                  <select
-                    value={record.status}
-                    onChange={(e) => {
-                      const updated = [...attendanceRecords];
-                      updated[idx].status = e.target.value;
-                      setAttendanceRecords(updated);
-                    }}
-                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="Present">Present</option>
-                    <option value="Late">Late</option>
-                    <option value="Absent">Absent</option>
-                  </select>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-              <button
-                onClick={() => setShowAttendanceModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveAttendance}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-              >
-                Save Attendance
-              </button>
-            </div>
-          </div>
         </Modal>
       </div>
     </AdminLayout>

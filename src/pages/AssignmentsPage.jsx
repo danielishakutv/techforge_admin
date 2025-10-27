@@ -3,39 +3,24 @@ import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
-import Drawer from '../components/ui/Drawer';
-import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
-import LabeledTextarea from '../components/ui/LabeledTextarea';
 import api from '../utils/api';
+import { toast } from 'react-toastify';
 
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
-  const [showGradeModal, setShowGradeModal] = useState(false);
-  const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [cohorts, setCohorts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editAssignment, setEditAssignment] = useState(null);
 
   const [newAssignment, setNewAssignment] = useState({
     title: '',
-    cohortId: '',
-    dueDate: '',
-    dueTime: '',
-    description: '',
-    referenceMaterial: '',
-    responseType: 'link',
-    maxScore: '100',
-    status: 'Assigned',
-  });
-
-  const [gradeData, setGradeData] = useState({
-    score: '',
-    feedback: '',
-    status: 'Graded',
+    cohort_id: '',
+    due_datetime: '',
+    response_type: 'text',
+    max_score: 100,
   });
 
   const handleCreateAssignment = (e) => {
@@ -44,64 +29,66 @@ export default function AssignmentsPage() {
       try {
         const payload = {
           title: newAssignment.title,
-          cohortId: parseInt(newAssignment.cohortId, 10),
-          dueDate: new Date(`${newAssignment.dueDate}T${newAssignment.dueTime}:00+01:00`).toISOString(),
-          description: newAssignment.description,
-          referenceMaterial: newAssignment.referenceMaterial,
-          responseType: newAssignment.responseType,
-          maxScore: parseInt(newAssignment.maxScore, 10),
-          status: newAssignment.status,
+          cohort_id: parseInt(newAssignment.cohort_id, 10),
+          response_type: newAssignment.response_type,
+          due_datetime: newAssignment.due_datetime,
+          max_score: parseInt(newAssignment.max_score, 10),
         };
         const resp = await api.createAssignment(payload);
         if (resp && resp.success) {
           const aResp = await api.getAssignments();
-          setAssignments((aResp && aResp.success && aResp.data.items) || []);
+          setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
           setShowCreateModal(false);
-          setNewAssignment({ title: '', cohortId: '', dueDate: '', dueTime: '', description: '', referenceMaterial: '', responseType: 'link', maxScore: '100', status: 'Assigned' });
+          setNewAssignment({ title: '', cohort_id: '', due_datetime: '', response_type: 'text', max_score: 100 });
+          toast.success('Assignment created successfully');
         } else {
           console.error('Create assignment failed', resp && resp.error);
-          alert('Failed to create assignment');
+          toast.error(resp?.error || 'Failed to create assignment');
         }
       } catch (err) {
         console.error('Create assignment error', err);
-        alert('Failed to create assignment');
+        toast.error('Failed to create assignment: ' + (err.message || 'Unknown error'));
       }
     })();
   };
 
-  const handleGrade = (submission) => {
-    setSelectedSubmission(submission);
-    setGradeData({
-      score: submission.score?.toString() || '',
-      feedback: submission.feedback || '',
-      status: submission.status === 'Graded' ? 'Graded' : 'Graded',
-    });
-    setShowGradeModal(true);
-  };
-
-  const handleSaveGrade = () => {
+  const handleUpdateAssignment = () => {
     (async () => {
       try {
-        const resp = await api.gradeSubmission(selectedSubmission.id, {
-          score: parseInt(gradeData.score, 10),
-          feedback: gradeData.feedback,
-          status: gradeData.status,
-        });
+        const payload = {
+          title: editAssignment.title,
+          due_datetime: editAssignment.due_datetime,
+        };
+        const resp = await api.updateAssignment(editAssignment.id, payload);
         if (resp && resp.success) {
           const aResp = await api.getAssignments();
-          setAssignments((aResp && aResp.success && aResp.data.items) || []);
-          // refresh selected assignment if still visible
-          setSelectedAssignment(null);
-          setShowGradeModal(false);
+          setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+          setShowEditModal(false);
+          setEditAssignment(null);
+          toast.success('Assignment updated successfully');
         } else {
-          console.error('Grade submission failed', resp && resp.error);
-          alert('Failed to save grade');
+          toast.error(resp?.error || 'Failed to update assignment');
         }
       } catch (err) {
-        console.error('Grade submission error', err);
-        alert('Failed to save grade');
+        toast.error('Failed to update assignment');
       }
     })();
+  };
+
+  const handleDeleteAssignment = async (id) => {
+    if (!window.confirm('Delete this assignment?')) return;
+    try {
+      const resp = await api.deleteAssignment(id);
+      if (resp && resp.success) {
+        const aResp = await api.getAssignments();
+        setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+        toast.success('Assignment deleted');
+      } else {
+        toast.error(resp?.error || 'Failed to delete assignment');
+      }
+    } catch (err) {
+      toast.error('Failed to delete assignment');
+    }
   };
 
   useEffect(() => {
@@ -110,13 +97,11 @@ export default function AssignmentsPage() {
       try {
         const [aResp, cResp] = await Promise.all([api.getAssignments().catch(() => null), api.getCohorts().catch(() => null)]);
         if (!mounted) return;
-        setAssignments((aResp && aResp.success && aResp.data.items) || []);
-        setCohorts((cResp && cResp.success && cResp.data.items) || []);
+        setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+        setCohorts((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
       } catch (err) {
         console.error('Failed to load assignments page data', err);
-        setError(err.message || 'Failed to load data');
-      } finally {
-        if (mounted) setLoading(false);
+        toast.error('Failed to load assignments');
       }
     }
     load();
@@ -124,42 +109,19 @@ export default function AssignmentsPage() {
   }, []);
 
   const assignmentColumns = [
+    { header: 'Title', accessor: 'title' },
+    { header: 'Cohort ID', accessor: 'cohort_id' },
+    { header: 'Due', render: (row) => row.due_datetime ? new Date(row.due_datetime).toLocaleString('en-NG') : '—' },
+    { header: 'Max Score', accessor: 'max_score' },
+    { header: 'Response Type', accessor: 'response_type' },
     {
-      header: 'Title',
-      accessor: 'title',
-    },
-    {
-      header: 'Cohort',
+      header: 'Actions',
       render: (row) => (
-        <div>
-          <p className="font-medium">{row.cohort}</p>
-          <p className="text-xs text-gray-500">{row.stream}</p>
+        <div className="flex space-x-2">
+          <button onClick={(e) => { e.stopPropagation(); setEditAssignment(row); setShowEditModal(true); }} className="text-sm text-primary-600 hover:underline">Edit</button>
+          <button onClick={(e) => { e.stopPropagation(); handleDeleteAssignment(row.id); }} className="text-sm text-red-600 hover:underline">Delete</button>
         </div>
       ),
-    },
-    {
-      header: 'Due Date/Time',
-      render: (row) => {
-        const date = new Date(row.dueDate);
-        return (
-          <div>
-            <p className="text-sm">{date.toLocaleDateString('en-NG')}</p>
-            <p className="text-xs text-gray-500">{date.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })} WAT</p>
-          </div>
-        );
-      },
-    },
-    {
-      header: 'Submissions',
-      render: (row) => `${row.submissions.length} / ${row.totalStudents}`,
-    },
-    {
-      header: 'Needs Grading',
-      render: (row) => row.submissions.filter(s => s.status === 'Submitted').length,
-    },
-    {
-      header: 'Status',
-      render: (row) => <StatusBadge status={row.status} />,
     },
   ];
 
@@ -176,11 +138,7 @@ export default function AssignmentsPage() {
               Create Assignment
             </button>
           </div>
-          <DataTable
-            columns={assignmentColumns}
-            data={assignments}
-            onRowClick={(assignment) => setSelectedAssignment(assignment)}
-          />
+          <DataTable columns={assignmentColumns} data={assignments} />
         </Card>
 
         <Modal
@@ -199,41 +157,18 @@ export default function AssignmentsPage() {
             />
             <LabeledSelect
               label="Select Cohort"
-              value={newAssignment.cohortId}
-              onChange={(e) => setNewAssignment({ ...newAssignment, cohortId: e.target.value })}
-              options={cohorts.map(c => ({ value: c.id.toString(), label: `${c.name} · ${c.stream}` }))}
+              value={newAssignment.cohort_id}
+              onChange={(e) => setNewAssignment({ ...newAssignment, cohort_id: e.target.value })}
+              options={cohorts.map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
               placeholder="Select a cohort"
               required
             />
-            <div className="grid grid-cols-2 gap-4">
-              <LabeledInput
-                label="Due Date"
-                type="date"
-                value={newAssignment.dueDate}
-                onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
-                required
-              />
-              <LabeledInput
-                label="Due Time"
-                type="time"
-                value={newAssignment.dueTime}
-                onChange={(e) => setNewAssignment({ ...newAssignment, dueTime: e.target.value })}
-                required
-              />
-            </div>
-            <LabeledTextarea
-              label="Description / Instructions"
-              value={newAssignment.description}
-              onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
-              placeholder="Detailed assignment instructions..."
-              required
-              rows={3}
-            />
             <LabeledInput
-              label="Reference Material for Students"
-              value={newAssignment.referenceMaterial}
-              onChange={(e) => setNewAssignment({ ...newAssignment, referenceMaterial: e.target.value })}
-              placeholder="https://drive.google.com/..."
+              label="Due Date & Time"
+              type="datetime-local"
+              value={newAssignment.due_datetime}
+              onChange={(e) => setNewAssignment({ ...newAssignment, due_datetime: e.target.value })}
+              required
             />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -243,41 +178,31 @@ export default function AssignmentsPage() {
                 <label className="flex items-center">
                   <input
                     type="radio"
-                    value="link"
-                    checked={newAssignment.responseType === 'link'}
-                    onChange={(e) => setNewAssignment({ ...newAssignment, responseType: e.target.value })}
+                    value="text"
+                    checked={newAssignment.response_type === 'text'}
+                    onChange={(e) => setNewAssignment({ ...newAssignment, response_type: e.target.value })}
                     className="mr-2"
                   />
-                  <span className="text-sm">Student must submit a LINK (Google Drive, GitHub, Figma, etc.)</span>
+                  <span className="text-sm">Text submission</span>
                 </label>
                 <label className="flex items-center">
                   <input
                     type="radio"
-                    value="text"
-                    checked={newAssignment.responseType === 'text'}
-                    onChange={(e) => setNewAssignment({ ...newAssignment, responseType: e.target.value })}
+                    value="link"
+                    checked={newAssignment.response_type === 'link'}
+                    onChange={(e) => setNewAssignment({ ...newAssignment, response_type: e.target.value })}
                     className="mr-2"
                   />
-                  <span className="text-sm">Student must submit TEXT / WRITE-UP (plain text response)</span>
+                  <span className="text-sm">Link submission</span>
                 </label>
               </div>
             </div>
             <LabeledInput
               label="Max Score"
               type="number"
-              value={newAssignment.maxScore}
-              onChange={(e) => setNewAssignment({ ...newAssignment, maxScore: e.target.value })}
+              value={newAssignment.max_score}
+              onChange={(e) => setNewAssignment({ ...newAssignment, max_score: e.target.value })}
               placeholder="100"
-              required
-            />
-            <LabeledSelect
-              label="Status"
-              value={newAssignment.status}
-              onChange={(e) => setNewAssignment({ ...newAssignment, status: e.target.value })}
-              options={[
-                { value: 'Assigned', label: 'Assigned' },
-                { value: 'Closed', label: 'Closed' },
-              ]}
               required
             />
             <div className="flex justify-end space-x-3 pt-4">
@@ -298,157 +223,32 @@ export default function AssignmentsPage() {
           </form>
         </Modal>
 
-        <Drawer
-          isOpen={selectedAssignment !== null}
-          onClose={() => setSelectedAssignment(null)}
-          title={selectedAssignment?.title || ''}
-          width="lg"
+        <Modal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          title="Edit Assignment"
         >
-          {selectedAssignment && (
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-2">Assignment Details</h4>
-                <div className="space-y-2">
-                  <p className="text-sm"><span className="font-medium">Cohort:</span> {selectedAssignment.cohort} · {selectedAssignment.stream}</p>
-                  <p className="text-sm"><span className="font-medium">Due:</span> {new Date(selectedAssignment.dueDate).toLocaleString('en-NG', { dateStyle: 'long', timeStyle: 'short' })} WAT</p>
-                  <p className="text-sm"><span className="font-medium">Response Type:</span> {selectedAssignment.responseType === 'link' ? 'Link Submission' : 'Text Submission'}</p>
-                  <p className="text-sm"><span className="font-medium">Max Score:</span> {selectedAssignment.maxScore}</p>
-                  {selectedAssignment.referenceMaterial && (
-                    <p className="text-sm">
-                      <span className="font-medium">Reference Material:</span>{' '}
-                      <a href={selectedAssignment.referenceMaterial} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">
-                        View Document
-                      </a>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-2">Description</h4>
-                <p className="text-sm text-gray-700">{selectedAssignment.description}</p>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Submissions ({selectedAssignment.submissions.length} / {selectedAssignment.totalStudents})</h4>
-                {selectedAssignment.submissions.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-8">No submissions yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedAssignment.submissions.map((submission) => (
-                      <div key={submission.id} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <p className="font-medium text-sm">{submission.studentName}</p>
-                            <p className="text-xs text-gray-500">
-                              Submitted: {new Date(submission.submittedAt).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })} WAT
-                            </p>
-                          </div>
-                          <StatusBadge status={submission.status} />
-                        </div>
-
-                        <div className="my-3">
-                          {selectedAssignment.responseType === 'link' && submission.responseLink && (
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Submitted Link:</p>
-                              <a
-                                href={submission.responseLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-primary-600 hover:underline break-all"
-                              >
-                                {submission.responseLink}
-                              </a>
-                            </div>
-                          )}
-                          {selectedAssignment.responseType === 'text' && submission.responseText && (
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Submitted Text:</p>
-                              <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded max-h-32 overflow-y-auto">
-                                {submission.responseText}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {submission.status === 'Graded' && (
-                          <div className="mt-3 pt-3 border-t border-gray-200">
-                            <p className="text-sm"><span className="font-medium">Score:</span> {submission.score} / {selectedAssignment.maxScore}</p>
-                            {submission.feedback && (
-                              <p className="text-sm mt-1"><span className="font-medium">Feedback:</span> {submission.feedback}</p>
-                            )}
-                          </div>
-                        )}
-
-                        <button
-                          onClick={() => handleGrade(submission)}
-                          className="mt-3 w-full px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-                        >
-                          {submission.status === 'Graded' ? 'Update Grade' : 'Grade Submission'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+          {editAssignment && (
+            <div className="space-y-4">
+              <LabeledInput
+                label="Title"
+                value={editAssignment.title}
+                onChange={(e) => setEditAssignment({ ...editAssignment, title: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="Due Date & Time"
+                type="datetime-local"
+                value={editAssignment.due_datetime}
+                onChange={(e) => setEditAssignment({ ...editAssignment, due_datetime: e.target.value })}
+                required
+              />
+              <div className="flex justify-end space-x-3 pt-4">
+                <button onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium">Cancel</button>
+                <button onClick={handleUpdateAssignment} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">Save Changes</button>
               </div>
             </div>
           )}
-        </Drawer>
-
-        <Modal
-          isOpen={showGradeModal}
-          onClose={() => setShowGradeModal(false)}
-          title="Grade Submission"
-        >
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium">Student: {selectedSubmission?.studentName}</p>
-              <p className="text-xs text-gray-500 mt-1">Assignment: {selectedAssignment?.title}</p>
-            </div>
-
-            <LabeledInput
-              label="Score"
-              type="number"
-              value={gradeData.score}
-              onChange={(e) => setGradeData({ ...gradeData, score: e.target.value })}
-              placeholder={`0 - ${selectedAssignment?.maxScore}`}
-              required
-            />
-
-            <LabeledTextarea
-              label="Feedback"
-              value={gradeData.feedback}
-              onChange={(e) => setGradeData({ ...gradeData, feedback: e.target.value })}
-              placeholder="Provide constructive feedback..."
-              rows={4}
-            />
-
-            <LabeledSelect
-              label="Status"
-              value={gradeData.status}
-              onChange={(e) => setGradeData({ ...gradeData, status: e.target.value })}
-              options={[
-                { value: 'Graded', label: 'Graded' },
-                { value: 'Resubmission Requested', label: 'Resubmission Requested' },
-              ]}
-              required
-            />
-
-            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-              <button
-                onClick={() => setShowGradeModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveGrade}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-              >
-                Save Grade
-              </button>
-            </div>
-          </div>
         </Modal>
       </div>
     </AdminLayout>
