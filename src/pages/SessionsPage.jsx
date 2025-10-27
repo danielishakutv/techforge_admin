@@ -26,6 +26,39 @@ export default function SessionsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // { id, cohortId, title }
 
+  // Formatting and lookup helpers
+  const getOrdinalSuffix = (n) => {
+    const j = n % 10, k = n % 100;
+    if (j === 1 && k !== 11) return 'st';
+    if (j === 2 && k !== 12) return 'nd';
+    if (j === 3 && k !== 13) return 'rd';
+    return 'th';
+  };
+
+  const formatReadableDate = (dateString) => {
+    if (!dateString) return '—';
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return '—';
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May.', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+    const dayName = days[d.getDay()];
+    const day = d.getDate();
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${dayName}, ${day}${getOrdinalSuffix(day)} ${month}, ${year}`;
+  };
+
+  const getInstructorNameById = (id) => {
+    if (!id) return '—';
+    const inst = instructors.find(u => u.id === parseInt(id, 10));
+    if (!inst) return id.toString();
+    if (inst.profile) {
+      const name = [inst.profile.first_name, inst.profile.middle_name, inst.profile.last_name].filter(Boolean).join(' ');
+      return name || inst.email || id.toString();
+    }
+    return inst.email || id.toString();
+  };
+
   const [newSession, setNewSession] = useState({
     cohort_id: '',
     title: '',
@@ -174,11 +207,10 @@ export default function SessionsPage() {
 
   const sessionColumns = [
     { header: 'Title', accessor: 'title' },
-    { header: 'Cohort ID', accessor: 'cohort_id' },
-    { header: 'Start', render: (row) => row.start_datetime ? new Date(row.start_datetime).toLocaleString('en-NG') : '—' },
-    { header: 'End', render: (row) => row.end_datetime ? new Date(row.end_datetime).toLocaleString('en-NG') : '—' },
+    { header: 'Start', render: (row) => formatReadableDate(row.start_datetime) },
+    { header: 'End', render: (row) => formatReadableDate(row.end_datetime) },
     { header: 'Delivery', render: (row) => <StatusBadge status={row.delivery_mode} /> },
-    { header: 'Instructor ID', accessor: 'instructor_id' },
+    { header: 'Instructor', render: (row) => getInstructorNameById(row.instructor_id) },
     {
       header: 'Actions',
       render: (row) => (
@@ -240,8 +272,17 @@ export default function SessionsPage() {
                 onChange={(e) => {
                   const val = e.target.value;
                   setFilterStreamId(val);
-                  setFilterCohortId('');
-                  setSessions([]);
+                  // Auto-select the first cohort for this stream and fetch sessions
+                  const first = cohorts
+                    .filter(c => c.stream_id === parseInt(val, 10))
+                    .sort((a, b) => (a.start_date || '').localeCompare(b.start_date || ''))[0];
+                  if (first) {
+                    setFilterCohortId(first.id.toString());
+                    fetchSessionsByCohort(first.id);
+                  } else {
+                    setFilterCohortId('');
+                    setSessions([]);
+                  }
                 }}
                 options={streams.map(s => ({ value: s.id.toString(), label: s.title }))}
                 placeholder="Select a stream"
@@ -257,7 +298,7 @@ export default function SessionsPage() {
                 options={cohorts
                   .filter(c => filterStreamId ? c.stream_id === parseInt(filterStreamId, 10) : false)
                   .map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
-                placeholder={filterStreamId ? 'Select a cohort' : 'Select a stream first'}
+                placeholder={filterStreamId ? '' : 'Select a stream first'}
                 disabled={!filterStreamId}
               />
             </div>
