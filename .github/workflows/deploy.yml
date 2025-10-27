@@ -35,7 +35,8 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           password: ${{ secrets.SERVER_PASSWORD }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          local_path: './build/*'
+          local_path: './build/'
           remote_path: ${{ secrets.SERVER_PATH }}
           sftp_only: true
           delete_remote_files: false
+          args: '-o ConnectTimeout=5'
