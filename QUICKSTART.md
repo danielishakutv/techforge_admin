@@ -14,15 +14,9 @@ npm start
 
 The app will automatically open at http://localhost:3000
 
-### 3. Login with Demo Credentials
+### 3. Login
 
-**Program Director (Full Access):**
-- Email: `daniel.okon@tokoacademy.org`
-- Password: `admin123`
-
-**Instructor (Limited Access):**
-- Email: `instructor@tokoacademy.org`
-- Password: `instructor123`
+The app expects an operational backend that issues JWT tokens from `/auth/login`. Configure `REACT_APP_API_BASE_URL` and sign in with a valid admin/instructor account provided by your backend.
 
 ---
 
@@ -49,9 +43,8 @@ The app will automatically open at http://localhost:3000
 - Admin: Full access to all features
 - Instructor: Limited to assigned streams/cohorts
 
-✅ **Realistic Mock Data:**
-- Nigerian context (WAT timezone, real names, locations)
-- 3 streams, 4 cohorts, multiple sessions, assignments, students
+✅ **API-driven Data:**
+All data is loaded from the backend API. There is no local mock data included by default.
 
 ---
 
@@ -95,8 +88,7 @@ src/
 │   └── ProtectedRoute.jsx
 ├── contexts/
 │   └── AuthContext.jsx
-├── data/
-│   └── mockData.js    # All mock data
+├── data/              # (removed) demo/mock data (app is API-driven)
 ├── pages/             # 9 complete pages
 ├── App.jsx            # Routing configuration
 └── index.jsx          # React entry point

@@ -9,13 +9,33 @@ import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
-import { streams as initialStreams, cohorts as initialCohorts } from '../data/mockData';
 import api from '../utils/api';
 
 export default function CohortsPage() {
   const [activeTab, setActiveTab] = useState('cohorts');
-  const [streams, setStreams] = useState(initialStreams);
-  const [cohorts, setCohorts] = useState(initialCohorts);
+  const [streams, setStreams] = useState([]);
+  const [cohorts, setCohorts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const [sResp, cResp] = await Promise.all([api.getStreams().catch(() => null), api.getCohorts().catch(() => null)]);
+        if (!mounted) return;
+        setStreams((sResp && sResp.success && sResp.data.items) || []);
+        setCohorts((cResp && cResp.success && cResp.data.items) || []);
+      } catch (err) {
+        console.error('Failed to load cohorts/streams:', err);
+        setError(err.message || 'Failed to load data');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
   const [showStreamModal, setShowStreamModal] = useState(false);
   const [showCohortModal, setShowCohortModal] = useState(false);
   const [selectedCohort, setSelectedCohort] = useState(null);
@@ -40,15 +60,21 @@ export default function CohortsPage() {
     e.preventDefault();
     (async () => {
       try {
-        const payload = { ...newStream, duration: parseInt(newStream.duration) };
-        const res = await api.createStream(payload);
-        const created = res?.success ? res.data : { id: streams.length + 1, ...payload };
-        setStreams(prev => [...prev, created]);
+        const payload = { ...newStream, duration: parseInt(newStream.duration || 0, 10) };
+        const resp = await api.createStream(payload);
+        if (resp && resp.success) {
+          // refresh streams
+          const sResp = await api.getStreams();
+          setStreams((sResp && sResp.success && sResp.data.items) || []);
+          setShowStreamModal(false);
+          setNewStream({ name: '', description: '', duration: '', status: 'Active' });
+        } else {
+          console.error('Create stream failed', resp && resp.error);
+          alert('Failed to create stream');
+        }
       } catch (err) {
-        setStreams(prev => [...prev, { id: prev.length + 1, ...newStream, duration: parseInt(newStream.duration) }]);
-      } finally {
-        setShowStreamModal(false);
-        setNewStream({ name: '', description: '', duration: '', status: 'Active' });
+        console.error('Create stream error', err);
+        alert('Failed to create stream');
       }
     })();
   };
@@ -58,34 +84,22 @@ export default function CohortsPage() {
     (async () => {
       try {
         const payload = { ...newCohort };
-        const res = await api.createCohort(payload);
-        const created = res?.success ? res.data : { id: cohorts.length + 1, ...payload, studentsEnrolled: 0, attendanceRate: 0, avgProgress: 0, certificateEligible: 0 };
-        setCohorts(prev => [...prev, created]);
+        const resp = await api.createCohort(payload);
+        if (resp && resp.success) {
+          const cResp = await api.getCohorts();
+          setCohorts((cResp && cResp.success && cResp.data.items) || []);
+          setShowCohortModal(false);
+          setNewCohort({ name: '', stream: '', leadInstructor: '', startDate: '', endDate: '', status: 'Upcoming' });
+        } else {
+          console.error('Create cohort failed', resp && resp.error);
+          alert('Failed to create cohort');
+        }
       } catch (err) {
-        setCohorts(prev => [...prev, { id: prev.length + 1, ...newCohort, studentsEnrolled: 0, attendanceRate: 0, avgProgress: 0, certificateEligible: 0 }]);
-      } finally {
-        setShowCohortModal(false);
-        setNewCohort({ name: '', stream: '', leadInstructor: '', startDate: '', endDate: '', status: 'Upcoming' });
+        console.error('Create cohort error', err);
+        alert('Failed to create cohort');
       }
     })();
   };
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const [streamsRes, cohortsRes] = await Promise.all([api.getStreams(), api.getCohorts()]);
-        if (!mounted) return;
-        setStreams(streamsRes?.success ? streamsRes.data.items : initialStreams);
-        setCohorts(cohortsRes?.success ? cohortsRes.data.items : initialCohorts);
-      } catch (err) {
-        setStreams(initialStreams);
-        setCohorts(initialCohorts);
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, []);
 
   const streamColumns = [
     {

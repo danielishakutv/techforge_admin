@@ -153,7 +153,7 @@ This creates an optimized production build in the `build/` folder.
 The app is configured with:
 - **Base URL**: `/admin` (set in `App.jsx` router basename)
 - **Homepage**: `https://bootcamp.tokoacademy.org/admin` (set in `package.json`)
-- **API Base URL**: `https://bootcamp.tokoacademy.org/api` (set in `.env.production`)
+- **API Base URL**: `https://api.bootcamp.tokoacademy.org` (set in `.env.production`)
 
 ### Server Configuration
 
@@ -219,8 +219,7 @@ src/
 │   └── ProtectedRoute.jsx        # HOC for protecting authenticated routes
 ├── contexts/
 │   └── AuthContext.jsx           # Authentication context (login, logout, user state)
-├── data/
-│   └── mockData.js               # Mock data for all entities (streams, cohorts, sessions, etc.)
+├── data/                         # (removed) demos and mock data were removed — app is API-driven
 ├── pages/
 │   ├── LoginPage.jsx             # Login page
 │   ├── DashboardPage.jsx         # Dashboard with KPIs and upcoming sessions
@@ -241,33 +240,7 @@ src/
 
 ## How It Will Connect to the Backend
 
-Currently, all data is **mocked** using local state and static arrays in `src/data/mockData.js`.
-
-When the PHP backend is ready, you will replace the mock data calls with real API requests:
-
-### Example Flow
-
-#### Current (Mock):
-```javascript
-const [cohorts, setCohorts] = useState(initialCohorts);
-```
-
-#### Future (API):
-```javascript
-const [cohorts, setCohorts] = useState([]);
-
-useEffect(() => {
-  const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || 'https://bootcamp.tokoacademy.org/api';
-  
-  fetch(`${apiBaseUrl}/admin/cohorts`, {
-    headers: {
-      'Authorization': `Bearer ${authToken}`,
-    },
-  })
-    .then(res => res.json())
-    .then(data => setCohorts(data));
-}, []);
-```
+All data is fetched from the backend API. The frontend calls the endpoints listed below via the centralized helper at `src/utils/api.js`. Authentication is handled with a JWT stored in `localStorage` and sent as a Bearer token on each request.
 
 ### Backend API Endpoints (Expected)
 
@@ -325,19 +298,9 @@ You'll store the token in `localStorage` after successful login and include it i
 
 ---
 
-## Mock Data
+## Data and Backend
 
-All mock data is located in **`src/data/mockData.js`**. It includes:
-
-- **Streams**: Web Development, AI Essentials, Data Analysis & Visualization
-- **Cohorts**: Cohort 12 (Ongoing), Cohort 13 (Upcoming), Cohort 3 (Ongoing), Cohort 5 (Completed)
-- **Sessions**: Scheduled and completed sessions with attendance tracking
-- **Students**: Realistic Nigerian names, locations, and enrollment data
-- **Assignments**: With link/text submission types and grading
-- **Certificates**: Eligibility tracking and issued certificates
-- **Announcements**: General and stream-specific broadcasts
-
-All times are in **WAT (West Africa Time)** to reflect the Nigerian context.
+This project is API-first: there are no demo data sources baked into the app. All entities (streams, cohorts, sessions, students, assignments, certificates, announcements) are fetched from the backend API endpoints described above. Configure `REACT_APP_API_BASE_URL` in your environment and ensure the backend issues JWT tokens via `/auth/login` for authentication.
 
 ---
 

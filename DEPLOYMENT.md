@@ -7,7 +7,7 @@
 
 ## Pre-Deployment Checklist
 
-- [ ] Backend API is running at `https://bootcamp.tokoacademy.org/api`
+- [ ] Backend API is running at `https://api.bootcamp.tokoacademy.org`
 - [ ] All API endpoints are tested and working
 - [ ] Authentication endpoints return JWT tokens
 - [ ] CORS is configured to allow requests from `/admin` subdirectory
@@ -135,13 +135,13 @@ app.listen(80, () => {
 ### Production (.env.production)
 ```
 PUBLIC_URL=/admin
-REACT_APP_API_BASE_URL=https://bootcamp.tokoacademy.org/api
+REACT_APP_API_BASE_URL=https://api.bootcamp.tokoacademy.org
 ```
 
 ### Development (.env.development)
 ```
 PUBLIC_URL=/
-REACT_APP_API_BASE_URL=http://localhost:8000/api
+REACT_APP_API_BASE_URL=http://localhost:8000
 ```
 
 ---
@@ -244,12 +244,12 @@ Test these endpoints once backend is connected:
 
 ```bash
 # Login
-curl -X POST https://bootcamp.tokoacademy.org/api/admin/login \
+ curl -X POST https://api.bootcamp.tokoacademy.org/admin/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@tokoacademy.org","password":"password"}'
 
 # Get cohorts (with token)
-curl https://bootcamp.tokoacademy.org/api/admin/cohorts \
+ curl https://api.bootcamp.tokoacademy.org/admin/cohorts \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 

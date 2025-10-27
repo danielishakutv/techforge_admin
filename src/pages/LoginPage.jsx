@@ -14,12 +14,18 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     
-    const result = login(email, password);
-    if (result.success) {
-      navigate('/dashboard');
-    } else {
-      setError(result.error || 'Invalid credentials');
-    }
+    (async () => {
+      try {
+        const result = await login(email, password);
+        if (result && result.success) {
+          navigate('/dashboard');
+        } else {
+          setError(result?.error || 'Invalid credentials');
+        }
+      } catch (err) {
+        setError(err?.message || 'Login failed');
+      }
+    })();
   };
 
   return (
@@ -74,12 +80,7 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">
-            Demo credentials: daniel.okon@tokoacademy.org / admin123
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            or instructor@tokoacademy.org / instructor123
-          </p>
+          <p className="text-xs text-gray-500">Sign in with your admin or instructor account issued by the backend.</p>
         </div>
       </div>
     </div>

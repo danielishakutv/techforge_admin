@@ -1,6 +1,6 @@
 // API utility functions for connecting to backend
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://bootcamp.tokoacademy.org/api';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://api.bootcamp.tokoacademy.org/';
 
 /**
  * Get authentication token from localStorage
@@ -41,7 +41,12 @@ export const apiRequest = async (endpoint, options = {}) => {
     },
   };
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+  // Build URL safely to avoid double-slashes
+  const base = String(API_BASE_URL).replace(/\/+$/, '');
+  const path = String(endpoint).startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${base}${path}`;
+
+  const response = await fetch(url, config);
   
   if (!response.ok) {
     if (response.status === 401) {
@@ -59,7 +64,8 @@ export const apiRequest = async (endpoint, options = {}) => {
  */
 export const api = {
   // Authentication
-  login: (email, password) => 
+  // NOTE: backend auth endpoint is /auth/login (returns { data: { token, expires_in, user } })
+  login: (email, password) =>
     apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),

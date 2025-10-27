@@ -4,7 +4,6 @@ import StatCard from '../components/ui/StatCard';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import StatusBadge from '../components/ui/StatusBadge';
-import { cohorts as mockCohorts, sessions as mockSessions, assignments as mockAssignments } from '../data/mockData';
 import api from '../utils/api';
 
 export default function DashboardPage() {
@@ -18,32 +17,30 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
+    async function load() {
       try {
-        const [cohortRes, sessionRes, assignmentRes] = await Promise.allSettled([
-          api.getCohorts(),
-          api.getSessions(),
-          api.getAssignments(),
+        const [cohResp, sessResp, assignResp] = await Promise.all([
+          api.getCohorts().catch(() => null),
+          api.getSessions().catch(() => null),
+          api.getAssignments().catch(() => null),
         ]);
 
-        const cohorts = cohortRes.status === 'fulfilled' && cohortRes.value?.success ? cohortRes.value.data.items : mockCohorts;
-        const sessions = sessionRes.status === 'fulfilled' && sessionRes.value?.success ? sessionRes.value.data.items : mockSessions;
-        const assignments = assignmentRes.status === 'fulfilled' && assignmentRes.value?.success ? assignmentRes.value.data.items : mockAssignments;
+  const cohortsData = (cohResp && cohResp.data && cohResp.data.items) || [];
+  const sessionsData = (sessResp && sessResp.data && sessResp.data.items) || [];
+  const assignmentsData = (assignResp && assignResp.data && assignResp.data.items) || [];
 
-        const activeCohorts = cohorts.filter(c => ['Ongoing', 'ongoing', 'Active', 'active', 'upcoming', 'Upcoming'].includes(c.status || c.cohort_name || ''));
-        const totalStudents = cohorts.reduce((sum, c) => sum + (c.studentsEnrolled || 0), 0);
+        const activeCohorts = cohortsData.filter(c => c.status === 'Ongoing' || c.status === 'Upcoming');
+        const totalStudents = cohortsData.reduce((sum, c) => sum + (c.studentsEnrolled || 0), 0);
 
-        const ongoing = cohorts.filter(c => c.status === 'Ongoing' || c.status === 'ongoing' || c.status === 'Active' || c.status === 'active');
-        const avgAttendance = ongoing.length > 0 ? (ongoing.reduce((sum, c) => sum + (c.attendanceRate || 0), 0) / ongoing.length) : 0;
+        const ongoingCohorts = cohortsData.filter(c => c.status === 'Ongoing');
+        const avgAttendance = ongoingCohorts.length > 0
+          ? (ongoingCohorts.reduce((sum, c) => sum + (c.attendanceRate || 0), 0) / ongoingCohorts.length)
+          : 0;
 
-        const waitingGrading = (assignments || []).reduce((sum, a) => {
-          const subs = a.submissions || [];
-          return sum + subs.filter(s => (s.status || '').toLowerCase() === 'submitted').length;
+        const waitingGrading = (assignmentsData || []).reduce((sum, a) => {
+          return sum + (a.submissions ? a.submissions.filter(s => s.status === 'Submitted').length : 0);
         }, 0);
 
-        if (!mounted) return;
         setStats({
           activeCohorts: activeCohorts.length,
           totalStudents,
@@ -51,7 +48,8 @@ export default function DashboardPage() {
           assignmentsWaitingGrading: waitingGrading,
         });
 
-        const upcoming = (sessions || []).filter(s => new Date(s.date) >= new Date() && (s.status || '').toLowerCase() === 'scheduled')
+        const upcoming = (sessionsData || [])
+          .filter(s => new Date(s.date) >= new Date() && s.status === 'Scheduled')
           .sort((a, b) => new Date(a.date) - new Date(b.date));
         setUpcomingSessions(upcoming);
 
@@ -68,29 +66,22 @@ export default function DashboardPage() {
           },
         ]);
       } catch (err) {
-        // fallback to mock data
-        const activeCohorts = mockCohorts.filter(c => c.status === 'Ongoing' || c.status === 'Upcoming');
-        const totalStudents = mockCohorts.reduce((sum, c) => sum + c.studentsEnrolled, 0);
-        const avgAttendance = mockCohorts.filter(c => c.status === 'Ongoing').reduce((sum, c) => sum + c.attendanceRate, 0) / Math.max(1, mockCohorts.filter(c => c.status === 'Ongoing').length);
-        const waitingGrading = mockAssignments.reduce((sum, a) => sum + a.submissions.filter(s => s.status === 'Submitted').length, 0);
-        if (!mounted) return;
+        // On error, clear stats/upcoming and surface minimal alerts
+        console.error('Dashboard load error:', err);
         setStats({
-          activeCohorts: activeCohorts.length,
-          totalStudents,
-          avgAttendance: Math.round(avgAttendance * 100),
-          assignmentsWaitingGrading: waitingGrading,
+          activeCohorts: 0,
+          totalStudents: 0,
+          avgAttendance: 0,
+          assignmentsWaitingGrading: 0,
         });
-        const upcoming = mockSessions.filter(s => new Date(s.date) >= new Date() && s.status === 'Scheduled').sort((a, b) => new Date(a.date) - new Date(b.date));
-        setUpcomingSessions(upcoming);
+        setUpcomingSessions([]);
         setAlerts([
-          { id: 1, message: 'Cohort 12 · Web Dev: Attendance dropped below 85% this week.', type: 'warning' },
-          { id: 2, message: 'AI Essentials · Cohort 3: 5 submissions still ungraded.', type: 'info' },
+          { id: 1, message: 'Failed to load dashboard data. Check network / API status.', type: 'warning' },
         ]);
       }
-    };
+    }
 
     load();
-    return () => { mounted = false; };
   }, []);
 
   const sessionColumns = [

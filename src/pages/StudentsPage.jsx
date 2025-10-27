@@ -5,36 +5,40 @@ import DataTable from '../components/ui/DataTable';
 import Drawer from '../components/ui/Drawer';
 import StatusBadge from '../components/ui/StatusBadge';
 import ProgressBar from '../components/ui/ProgressBar';
-import { students as initialStudents } from '../data/mockData';
 import api from '../utils/api';
 
 export default function StudentsPage() {
-  const [studentsState, setStudentsState] = useState(initialStudents);
+  const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [streamFilter, setStreamFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const filteredStudents = studentsState.filter(student => {
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const resp = await api.getStudents();
+        if (!mounted) return;
+        setStudents((resp && resp.success && resp.data.items) || []);
+      } catch (err) {
+        console.error('Failed to load students', err);
+        setError(err.message || 'Failed to load students');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
+
+  const filteredStudents = (students || []).filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           student.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStream = streamFilter === '' || student.stream === streamFilter;
     return matchesSearch && matchesStream;
   });
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const res = await api.getStudents();
-        if (!mounted) return;
-        setStudentsState(res?.success ? res.data.items : initialStudents);
-      } catch (err) {
-        setStudentsState(initialStudents);
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, []);
 
   const studentColumns = [
     {

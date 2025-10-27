@@ -8,15 +8,17 @@ import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
-import { assignments as initialAssignments, cohorts } from '../data/mockData';
 import api from '../utils/api';
 
 export default function AssignmentsPage() {
-  const [assignments, setAssignments] = useState(initialAssignments);
+  const [assignments, setAssignments] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [showGradeModal, setShowGradeModal] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [cohorts, setCohorts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const [newAssignment, setNewAssignment] = useState({
     title: '',
@@ -36,86 +38,35 @@ export default function AssignmentsPage() {
     status: 'Graded',
   });
 
-  useEffect(() => {
-    let mounted = true;
-
-    const load = async () => {
-      try {
-        const res = await api.getAssignments();
-        const serverAssignments = res?.success ? res.data.items : initialAssignments;
-        if (!mounted) return;
-        setAssignments(serverAssignments);
-
-        // Auto-approve any submissions that requested changes
-        for (const assignment of serverAssignments) {
-          for (const submission of assignment.submissions || []) {
-            const status = (submission.status || '').toLowerCase();
-            if (status.includes('request') || status.includes('reopen') || status.includes('changes')) {
-              try {
-                const gradePayload = {
-                  score: assignment.maxScore || 100,
-                  feedback: 'Auto-approved by admin',
-                };
-                await api.gradeSubmission(submission.id, gradePayload);
-                // update local state optimistically
-                setAssignments(prev => prev.map(a => {
-                  if (a.id !== assignment.id) return a;
-                  return {
-                    ...a,
-                    submissions: (a.submissions || []).map(s => s.id === submission.id ? { ...s, status: 'Graded', score: gradePayload.score, feedback: gradePayload.feedback } : s),
-                  };
-                }));
-              } catch (err) {
-                // ignore errors but continue
-                console.warn('Auto-approve failed for submission', submission.id, err);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        // fallback to mock data
-        setAssignments(initialAssignments);
-      }
-    };
-
-    load();
-    return () => { mounted = false; };
-  }, []);
-
   const handleCreateAssignment = (e) => {
     e.preventDefault();
-    const cohort = cohorts.find(c => c.id === parseInt(newAssignment.cohortId));
-    const dueDateTime = new Date(`${newAssignment.dueDate}T${newAssignment.dueTime}:00+01:00`);
-    
-    const assignment = {
-      id: assignments.length + 77,
-      title: newAssignment.title,
-      cohort: cohort.name,
-      cohortId: cohort.id,
-      stream: cohort.stream,
-      dueDate: dueDateTime.toISOString(),
-      description: newAssignment.description,
-      referenceMaterial: newAssignment.referenceMaterial,
-      responseType: newAssignment.responseType,
-      maxScore: parseInt(newAssignment.maxScore),
-      status: newAssignment.status,
-      totalStudents: cohort.studentsEnrolled,
-      submissions: [],
-    };
-    
-    setAssignments([...assignments, assignment]);
-    setShowCreateModal(false);
-    setNewAssignment({
-      title: '',
-      cohortId: '',
-      dueDate: '',
-      dueTime: '',
-      description: '',
-      referenceMaterial: '',
-      responseType: 'link',
-      maxScore: '100',
-      status: 'Assigned',
-    });
+    (async () => {
+      try {
+        const payload = {
+          title: newAssignment.title,
+          cohortId: parseInt(newAssignment.cohortId, 10),
+          dueDate: new Date(`${newAssignment.dueDate}T${newAssignment.dueTime}:00+01:00`).toISOString(),
+          description: newAssignment.description,
+          referenceMaterial: newAssignment.referenceMaterial,
+          responseType: newAssignment.responseType,
+          maxScore: parseInt(newAssignment.maxScore, 10),
+          status: newAssignment.status,
+        };
+        const resp = await api.createAssignment(payload);
+        if (resp && resp.success) {
+          const aResp = await api.getAssignments();
+          setAssignments((aResp && aResp.success && aResp.data.items) || []);
+          setShowCreateModal(false);
+          setNewAssignment({ title: '', cohortId: '', dueDate: '', dueTime: '', description: '', referenceMaterial: '', responseType: 'link', maxScore: '100', status: 'Assigned' });
+        } else {
+          console.error('Create assignment failed', resp && resp.error);
+          alert('Failed to create assignment');
+        }
+      } catch (err) {
+        console.error('Create assignment error', err);
+        alert('Failed to create assignment');
+      }
+    })();
   };
 
   const handleGrade = (submission) => {
@@ -129,41 +80,48 @@ export default function AssignmentsPage() {
   };
 
   const handleSaveGrade = () => {
-    const updatedAssignments = assignments.map(assignment => {
-      if (assignment.id === selectedAssignment.id) {
-        const updatedSubmissions = assignment.submissions.map(sub => {
-          if (sub.id === selectedSubmission.id) {
-            return {
-              ...sub,
-              score: parseInt(gradeData.score),
-              feedback: gradeData.feedback,
-              status: gradeData.status,
-            };
-          }
-          return sub;
+    (async () => {
+      try {
+        const resp = await api.gradeSubmission(selectedSubmission.id, {
+          score: parseInt(gradeData.score, 10),
+          feedback: gradeData.feedback,
+          status: gradeData.status,
         });
-        return { ...assignment, submissions: updatedSubmissions };
-      }
-      return assignment;
-    });
-
-    setAssignments(updatedAssignments);
-    setSelectedAssignment({
-      ...selectedAssignment,
-      submissions: selectedAssignment.submissions.map(sub => {
-        if (sub.id === selectedSubmission.id) {
-          return {
-            ...sub,
-            score: parseInt(gradeData.score),
-            feedback: gradeData.feedback,
-            status: gradeData.status,
-          };
+        if (resp && resp.success) {
+          const aResp = await api.getAssignments();
+          setAssignments((aResp && aResp.success && aResp.data.items) || []);
+          // refresh selected assignment if still visible
+          setSelectedAssignment(null);
+          setShowGradeModal(false);
+        } else {
+          console.error('Grade submission failed', resp && resp.error);
+          alert('Failed to save grade');
         }
-        return sub;
-      }),
-    });
-    setShowGradeModal(false);
+      } catch (err) {
+        console.error('Grade submission error', err);
+        alert('Failed to save grade');
+      }
+    })();
   };
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const [aResp, cResp] = await Promise.all([api.getAssignments().catch(() => null), api.getCohorts().catch(() => null)]);
+        if (!mounted) return;
+        setAssignments((aResp && aResp.success && aResp.data.items) || []);
+        setCohorts((cResp && cResp.success && cResp.data.items) || []);
+      } catch (err) {
+        console.error('Failed to load assignments page data', err);
+        setError(err.message || 'Failed to load data');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const assignmentColumns = [
     {

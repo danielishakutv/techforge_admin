@@ -6,16 +6,18 @@ import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
 import AnnouncementAudienceBadge from '../components/ui/AnnouncementAudienceBadge';
-import { announcements as initialAnnouncements, streams } from '../data/mockData';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function AnnouncementsPage() {
-  const [announcements, setAnnouncements] = useState(initialAnnouncements);
+  const [announcements, setAnnouncements] = useState([]);
   const [audienceType, setAudienceType] = useState('global');
   const [selectedStream, setSelectedStream] = useState('');
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [streams, setStreams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const { adminUser } = useAuth();
 
   const handleSendAnnouncement = (e) => {
@@ -25,42 +27,43 @@ export default function AnnouncementsPage() {
         const payload = {
           title,
           message,
-          audience: audienceType,
+          audienceType,
           stream: audienceType === 'stream' ? selectedStream : null,
         };
-        const res = await api.broadcastAnnouncement(payload);
-        if (res?.success) {
-          setAnnouncements(prev => [res.data, ...prev]);
+        const resp = await api.broadcastAnnouncement(payload);
+        if (resp && resp.success) {
+          const aResp = await api.getRecentAnnouncements();
+          setAnnouncements((aResp && aResp.success && aResp.data.items) || []);
+          setTitle('');
+          setMessage('');
+          setAudienceType('global');
+          setSelectedStream('');
         } else {
-          // fallback local
-          let deliveredCount = audienceType === 'global' ? 126 : (streams.find(s => s.name === selectedStream) ? Math.floor(Math.random() * 30) + 15 : 0);
-          const announcement = { id: announcements.length + 9001, title, message, audienceType, stream: audienceType === 'stream' ? selectedStream : null, sentBy: adminUser?.name || 'Admin', sentAt: new Date().toISOString(), deliveredCount };
-          setAnnouncements(prev => [announcement, ...prev]);
+          console.error('Failed to send announcement', resp && resp.error);
+          alert('Failed to send announcement');
         }
       } catch (err) {
-        let deliveredCount = audienceType === 'global' ? 126 : (streams.find(s => s.name === selectedStream) ? Math.floor(Math.random() * 30) + 15 : 0);
-        const announcement = { id: announcements.length + 9001, title, message, audienceType, stream: audienceType === 'stream' ? selectedStream : null, sentBy: adminUser?.name || 'Admin', sentAt: new Date().toISOString(), deliveredCount };
-        setAnnouncements(prev => [announcement, ...prev]);
-      } finally {
-        setTitle('');
-        setMessage('');
-        setAudienceType('global');
-        setSelectedStream('');
+        console.error('Send announcement error', err);
+        alert('Failed to send announcement');
       }
     })();
   };
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    async function load() {
       try {
-        const res = await api.getRecentAnnouncements();
+        const [aResp, sResp] = await Promise.all([api.getRecentAnnouncements().catch(() => null), api.getStreams().catch(() => null)]);
         if (!mounted) return;
-        setAnnouncements(res?.success ? res.data.items : initialAnnouncements);
+        setAnnouncements((aResp && aResp.success && aResp.data.items) || []);
+        setStreams((sResp && sResp.success && sResp.data.items) || []);
       } catch (err) {
-        setAnnouncements(initialAnnouncements);
+        console.error('Failed to load announcements', err);
+        setError(err.message || 'Failed to load announcements');
+      } finally {
+        if (mounted) setLoading(false);
       }
-    };
+    }
     load();
     return () => { mounted = false; };
   }, []);

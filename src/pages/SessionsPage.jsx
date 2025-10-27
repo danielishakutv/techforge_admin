@@ -8,15 +8,18 @@ import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
-import { sessions as initialSessions, cohorts, students } from '../data/mockData';
 import api from '../utils/api';
 
 export default function SessionsPage() {
-  const [sessions, setSessions] = useState(initialSessions);
+  const [sessions, setSessions] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [cohorts, setCohorts] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const [newSession, setNewSession] = useState({
     cohortId: '',
@@ -32,85 +35,81 @@ export default function SessionsPage() {
 
   const handleCreateSession = (e) => {
     e.preventDefault();
-    const cohort = cohorts.find(c => c.id === parseInt(newSession.cohortId));
-    const dateTime = new Date(`${newSession.date}T${newSession.time}:00+01:00`);
     (async () => {
-      const payload = {
-        date: dateTime.toISOString(),
-        topic: newSession.topic,
-        description: newSession.description,
-        cohortId: cohort.id,
-        instructor: newSession.instructor,
-        deliveryMode: newSession.deliveryMode,
-        meetingLink: newSession.deliveryMode === 'Online' ? newSession.meetingLink : null,
-        venue: newSession.deliveryMode === 'Physical' ? newSession.venue : null,
-      };
       try {
-        const res = await api.createSession(payload);
-        const created = res?.success ? res.data : { id: sessions.length + 201, cohort: cohort.name, cohortId: cohort.id, stream: cohort.stream, status: 'Scheduled', attendance: null, ...payload };
-        setSessions(prev => [...prev, created]);
+        const payload = {
+          cohortId: parseInt(newSession.cohortId, 10),
+          topic: newSession.topic,
+          description: newSession.description,
+          instructor: newSession.instructor,
+          deliveryMode: newSession.deliveryMode,
+          date: new Date(`${newSession.date}T${newSession.time}:00+01:00`).toISOString(),
+          meetingLink: newSession.deliveryMode === 'Online' ? newSession.meetingLink : null,
+          venue: newSession.deliveryMode === 'Physical' ? newSession.venue : null,
+        };
+        const resp = await api.createSession(payload);
+        if (resp && resp.success) {
+          const sResp = await api.getSessions();
+          setSessions((sResp && sResp.success && sResp.data.items) || []);
+          setShowCreateModal(false);
+          setNewSession({ cohortId: '', topic: '', description: '', instructor: '', deliveryMode: 'Online', date: '', time: '', meetingLink: '', venue: '' });
+        } else {
+          console.error('Failed to create session', resp && resp.error);
+          alert('Failed to create session');
+        }
       } catch (err) {
-        setSessions(prev => [...prev, { id: prev.length + 201, cohort: cohort.name, cohortId: cohort.id, stream: cohort.stream, status: 'Scheduled', attendance: null, ...payload }]);
-      } finally {
-        setShowCreateModal(false);
-        setNewSession({ cohortId: '', topic: '', description: '', instructor: '', deliveryMode: 'Online', date: '', time: '', meetingLink: '', venue: '' });
+        console.error('Create session error', err);
+        alert('Failed to create session');
       }
     })();
   };
 
   const handleOpenAttendance = () => {
     const cohortStudents = students.filter(s => s.cohortId === selectedSession.cohortId);
-    const records = cohortStudents.map(student => ({
-      studentId: student.id,
-      studentName: student.name,
-      status: 'Present',
-    }));
+    const records = cohortStudents.map(student => ({ studentId: student.id, studentName: student.name, status: 'Present' }));
     setAttendanceRecords(records);
     setShowAttendanceModal(true);
   };
 
   const handleSaveAttendance = () => {
-    const present = attendanceRecords.filter(r => r.status === 'Present').length;
-    const late = attendanceRecords.filter(r => r.status === 'Late').length;
-    const absent = attendanceRecords.filter(r => r.status === 'Absent').length;
     (async () => {
       try {
-        await api.markAttendance({ sessionId: selectedSession.id, attendance: attendanceRecords });
-        const updatedSessions = sessions.map(s => {
-          if (s.id === selectedSession.id) {
-            return { ...s, status: 'Completed', attendance: { present, late, absent } };
-          }
-          return s;
+        const resp = await api.markAttendance({
+          sessionId: selectedSession.id,
+          records: attendanceRecords,
         });
-        setSessions(updatedSessions);
-        setSelectedSession({ ...selectedSession, attendance: { present, late, absent }, status: 'Completed' });
+        if (resp && resp.success) {
+          const sResp = await api.getSessions();
+          setSessions((sResp && sResp.success && sResp.data.items) || []);
+          setSelectedSession(null);
+          setShowAttendanceModal(false);
+        } else {
+          console.error('Failed to save attendance', resp && resp.error);
+          alert('Failed to save attendance');
+        }
       } catch (err) {
-        // fallback to local update
-        const updatedSessions = sessions.map(s => {
-          if (s.id === selectedSession.id) {
-            return { ...s, status: 'Completed', attendance: { present, late, absent } };
-          }
-          return s;
-        });
-        setSessions(updatedSessions);
-        setSelectedSession({ ...selectedSession, attendance: { present, late, absent }, status: 'Completed' });
-      } finally {
-        setShowAttendanceModal(false);
+        console.error('Save attendance error', err);
+        alert('Failed to save attendance');
       }
     })();
   };
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    async function load() {
       try {
-        const res = await api.getSessions();
+        const [sResp, cResp, stResp] = await Promise.all([api.getSessions().catch(() => null), api.getCohorts().catch(() => null), api.getStudents().catch(() => null)]);
         if (!mounted) return;
-        setSessions(res?.success ? res.data.items : initialSessions);
+        setSessions((sResp && sResp.success && sResp.data.items) || []);
+        setCohorts((cResp && cResp.success && cResp.data.items) || []);
+        setStudents((stResp && stResp.success && stResp.data.items) || []);
       } catch (err) {
-        setSessions(initialSessions);
+        console.error('Failed to load sessions page data', err);
+        setError(err.message || 'Failed to load data');
+      } finally {
+        if (mounted) setLoading(false);
       }
-    };
+    }
     load();
     return () => { mounted = false; };
   }, []);

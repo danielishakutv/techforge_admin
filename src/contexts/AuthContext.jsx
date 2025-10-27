@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react';
-import api, { setAuthToken, getAuthToken, removeAuthToken } from '../utils/api';
+import api, { setAuthToken, removeAuthToken, getAuthToken } from '../utils/api';
 
 const AuthContext = createContext();
 
@@ -23,19 +23,24 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const res = await api.login(email, password);
-      if (res && res.success && res.data) {
-        const { token, user } = res.data;
-        if (token) {
-          setAuthToken(token);
-        }
+      const resp = await api.login(email, password);
+      // apiRequest unwraps the JSON but backend returns envelope { success, data, error }
+      if (resp && resp.data && resp.data.token) {
+        setAuthToken(resp.data.token);
+        const user = resp.data.user || null;
         setAdminUser(user);
         localStorage.setItem('adminUser', JSON.stringify(user));
-        return { success: true };
+        return { success: true, user };
       }
-      return { success: false, error: res?.error?.message || 'Invalid credentials' };
+      return { success: false, error: resp?.error || 'Invalid response from auth' };
     } catch (err) {
-      return { success: false, error: err.message || 'Login failed' };
+      // apiRequest throws on non-ok; attempt to parse envelope
+      try {
+        const body = await err?.response?.json();
+        return { success: false, error: body?.error || err.message };
+      } catch (e) {
+        return { success: false, error: err.message || 'Login failed' };
+      }
     }
   };
 
@@ -47,11 +52,14 @@ export function AuthProvider({ children }) {
 
   const checkAuth = () => {
     const token = getAuthToken();
-    if (!token) return false;
     const stored = localStorage.getItem('adminUser');
-    if (stored) {
-      setAdminUser(JSON.parse(stored));
-      return true;
+    if (token && stored) {
+      try {
+        setAdminUser(JSON.parse(stored));
+        return true;
+      } catch (e) {
+        return false;
+      }
     }
     return false;
   };

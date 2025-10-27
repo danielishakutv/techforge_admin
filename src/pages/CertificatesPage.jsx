@@ -5,72 +5,54 @@ import DataTable from '../components/ui/DataTable';
 import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
-import { certificates as initialCertificates } from '../data/mockData';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function CertificatesPage() {
-  const [certificates, setCertificates] = useState(initialCertificates);
+  const [certificates, setCertificates] = useState([]);
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [selectedCertificate, setSelectedCertificate] = useState(null);
   const { adminUser } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const resp = await api.getCertificates();
+        if (!mounted) return;
+        setCertificates((resp && resp.success && resp.data.items) || []);
+      } catch (err) {
+        console.error('Failed to load certificates', err);
+        setError(err.message || 'Failed to load certificates');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const handleIssueCertificate = () => {
     (async () => {
       try {
-        const payload = { studentId: selectedCertificate.studentId, cohortId: selectedCertificate.cohortId };
-        const res = await api.issueCertificate(payload);
-        const issued = res?.success ? res.data : null;
-        if (issued) {
-          setCertificates(prev => prev.map(cert => cert.id === selectedCertificate.id ? { ...cert, eligibilityStatus: 'Issued', certificateNumber: issued.certificateNumber || cert.certificateNumber, issuedDate: issued.issuedDate || cert.issuedDate, pdfUrl: issued.pdfUrl || cert.pdfUrl } : cert));
+        const resp = await api.issueCertificate({ id: selectedCertificate.id });
+        if (resp && resp.success) {
+          const cResp = await api.getCertificates();
+          setCertificates((cResp && cResp.success && cResp.data.items) || []);
+          setShowIssueModal(false);
+          setSelectedCertificate(null);
         } else {
-          // fallback local update
-          const certNumber = `TFB-${selectedCertificate.stream.split(' ')[0].substring(0, 2).toUpperCase()}-2025-${String(certificates.length + 100).padStart(5, '0')}`;
-          const today = new Date().toISOString().split('T')[0];
-          setCertificates(prev => prev.map(cert => cert.id === selectedCertificate.id ? { ...cert, eligibilityStatus: 'Issued', certificateNumber: certNumber, issuedDate: today, pdfUrl: `https://certificates.tokoacademy.org/${certNumber}.pdf` } : cert));
+          console.error('Issue certificate failed', resp && resp.error);
+          alert('Failed to issue certificate');
         }
       } catch (err) {
-        // fallback
-        const certNumber = `TFB-${selectedCertificate.stream.split(' ')[0].substring(0, 2).toUpperCase()}-2025-${String(certificates.length + 100).padStart(5, '0')}`;
-        const today = new Date().toISOString().split('T')[0];
-        setCertificates(prev => prev.map(cert => cert.id === selectedCertificate.id ? { ...cert, eligibilityStatus: 'Issued', certificateNumber: certNumber, issuedDate: today, pdfUrl: `https://certificates.tokoacademy.org/${certNumber}.pdf` } : cert));
-      } finally {
-        setShowIssueModal(false);
-        setSelectedCertificate(null);
+        console.error('Issue certificate error', err);
+        alert('Failed to issue certificate');
       }
     })();
   };
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const res = await api.getCertificates();
-        if (!mounted) return;
-        const server = res?.success ? res.data.items : initialCertificates;
-        setCertificates(server);
-
-        // Auto-issue any eligible certificates
-        for (const cert of server) {
-          if ((cert.eligibilityStatus || '').toLowerCase() === 'eligible') {
-            try {
-              const payload = { studentId: cert.studentId, cohortId: cert.cohortId };
-              const r = await api.issueCertificate(payload);
-              if (r?.success) {
-                setCertificates(prev => prev.map(c => c.id === cert.id ? { ...c, eligibilityStatus: 'Issued', certificateNumber: r.data.certificateNumber, issuedDate: r.data.issuedDate, pdfUrl: r.data.pdfUrl } : c));
-              }
-            } catch (err) {
-              console.warn('Auto-issue failed for certificate', cert.id, err);
-            }
-          }
-        }
-      } catch (err) {
-        setCertificates(initialCertificates);
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, []);
 
   const certificateColumns = [
     {
