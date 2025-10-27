@@ -35,8 +35,11 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           password: ${{ secrets.SERVER_PASSWORD }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          local_path: './build/'
-          remote_path: ${{ secrets.SERVER_PATH }}
+          # Upload the CONTENTS of the build directory, not the build folder itself
+          local_path: './build/*'
+          # Ensure remote path points to the /admin directory root (e.g., /var/www/html/admin)
+          remote_path: ${{ secrets.SERVER_PATH }}/
           sftp_only: true
-          delete_remote_files: false
+          # Replace existing files to avoid stale assets on the server
+          delete_remote_files: true
           args: '-o ConnectTimeout=5'
