@@ -5,79 +5,62 @@ import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import StatusBadge from '../components/ui/StatusBadge';
 import api from '../utils/api';
+import StatusPill from '../components/ui/StatusBadge';
 
 export default function DashboardPage() {
   const [upcomingSessions, setUpcomingSessions] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [streams, setStreams] = useState([]);
+  const [recentCohorts, setRecentCohorts] = useState([]);
   const [stats, setStats] = useState({
     activeCohorts: 0,
-    totalStudents: 0,
-    avgAttendance: 0,
-    assignmentsWaitingGrading: 0,
+    activeStreams: 0,
+    totalStreams: 0,
   });
 
   useEffect(() => {
     async function load() {
       try {
-        const [cohResp, sessResp, assignResp] = await Promise.all([
+        const [cohResp, strResp] = await Promise.all([
           api.getCohorts().catch(() => null),
-          api.getSessions().catch(() => null),
-          api.getAssignments().catch(() => null),
+          api.getStreams().catch(() => null),
         ]);
 
-  const cohortsData = (cohResp && cohResp.data && cohResp.data.items) || [];
-  const sessionsData = (sessResp && sessResp.data && sessResp.data.items) || [];
-  const assignmentsData = (assignResp && assignResp.data && assignResp.data.items) || [];
+        const cohortsData = (cohResp && cohResp.success && Array.isArray(cohResp.data)) ? cohResp.data : [];
+        const streamsData = (strResp && strResp.success && Array.isArray(strResp.data)) ? strResp.data : [];
 
-        const activeCohorts = cohortsData.filter(c => c.status === 'Ongoing' || c.status === 'Upcoming');
-        const totalStudents = cohortsData.reduce((sum, c) => sum + (c.studentsEnrolled || 0), 0);
+        setStreams(streamsData);
 
-        const ongoingCohorts = cohortsData.filter(c => c.status === 'Ongoing');
-        const avgAttendance = ongoingCohorts.length > 0
-          ? (ongoingCohorts.reduce((sum, c) => sum + (c.attendanceRate || 0), 0) / ongoingCohorts.length)
-          : 0;
-
-        const waitingGrading = (assignmentsData || []).reduce((sum, a) => {
-          return sum + (a.submissions ? a.submissions.filter(s => s.status === 'Submitted').length : 0);
-        }, 0);
+        const activeCohorts = cohortsData.filter(c => ['ongoing','upcoming'].includes((c.status || '').toLowerCase()));
+        const activeStreams = streamsData.filter(s => s.is_active !== false).length;
 
         setStats({
           activeCohorts: activeCohorts.length,
-          totalStudents,
-          avgAttendance: Math.round(avgAttendance * 100),
-          assignmentsWaitingGrading: waitingGrading,
+          activeStreams,
+          totalStreams: streamsData.length,
         });
 
-        const upcoming = (sessionsData || [])
-          .filter(s => new Date(s.date) >= new Date() && s.status === 'Scheduled')
-          .sort((a, b) => new Date(a.date) - new Date(b.date));
-        setUpcomingSessions(upcoming);
+        // Recent cohorts by most recent start_date (or id)
+        const sortedCohorts = [...cohortsData].sort((a,b) => {
+          const ad = a.start_date ? new Date(a.start_date).getTime() : 0;
+          const bd = b.start_date ? new Date(b.start_date).getTime() : 0;
+          return bd - ad;
+        });
+        setRecentCohorts(sortedCohorts.slice(0,5));
 
-        setAlerts([
-          {
-            id: 1,
-            message: 'Cohort 12 · Web Dev: Attendance dropped below 85% this week.',
-            type: 'warning',
-          },
-          {
-            id: 2,
-            message: 'AI Essentials · Cohort 3: 5 submissions still ungraded.',
-            type: 'info',
-          },
-        ]);
+        // Placeholder: clear sessions and alerts for now, or keep empty
+        setUpcomingSessions([]);
+        setAlerts([]);
       } catch (err) {
         // On error, clear stats/upcoming and surface minimal alerts
         console.error('Dashboard load error:', err);
         setStats({
           activeCohorts: 0,
-          totalStudents: 0,
-          avgAttendance: 0,
-          assignmentsWaitingGrading: 0,
+          activeStreams: 0,
+          totalStreams: 0,
         });
         setUpcomingSessions([]);
-        setAlerts([
-          { id: 1, message: 'Failed to load dashboard data. Check network / API status.', type: 'warning' },
-        ]);
+        setAlerts([{ id: 1, message: 'Failed to load dashboard data.', type: 'warning' }]);
       }
     }
 
@@ -124,6 +107,28 @@ export default function DashboardPage() {
     },
   ];
 
+  const recentCohortColumns = [
+    {
+      header: 'Cohort',
+      render: (row) => (
+        <div>
+          <p className="font-medium">{row.cohort_name}</p>
+          <p className="text-xs text-gray-500">{row.stream_title || (streams.find(s => s.id === row.stream_id)?.title) || '—'}</p>
+        </div>
+      ),
+    },
+    {
+      header: 'Start Date',
+      render: (row) => (
+        <span>{row.start_date ? new Date(row.start_date).toLocaleDateString('en-NG') : '—'}</span>
+      ),
+    },
+    {
+      header: 'Status',
+      render: (row) => <StatusPill status={row.status} />,
+    },
+  ];
+
   return (
     <AdminLayout pageTitle="Dashboard">
       <div className="space-y-6">
@@ -138,60 +143,62 @@ export default function DashboardPage() {
             }
           />
           <StatCard
-            title="Total Students Enrolled"
-            value={stats.totalStudents}
+            title="Active Streams"
+            value={stats.activeStreams}
             icon={
               <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
               </svg>
             }
           />
           <StatCard
-            title="Attendance Today"
-            value={`${stats.avgAttendance}%`}
+            title="Total Streams"
+            value={stats.totalStreams}
             icon={
               <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            }
-          />
-          <StatCard
-            title="Assignments Waiting for Grading"
-            value={stats.assignmentsWaitingGrading}
-            icon={
-              <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             }
           />
         </div>
 
-        <Card>
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Upcoming Sessions</h3>
-          </div>
-          <DataTable columns={sessionColumns} data={upcomingSessions} />
-        </Card>
+        {upcomingSessions.length > 0 && (
+          <Card>
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Upcoming Sessions</h3>
+            </div>
+            <DataTable columns={sessionColumns} data={upcomingSessions} />
+          </Card>
+        )}
 
         <Card>
           <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Alerts</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Recent Cohorts</h3>
           </div>
-          <div className="p-6 space-y-3">
-            {alerts.map((alert) => (
-              <div
-                key={alert.id}
-                className={`p-4 rounded-lg border ${
-                  alert.type === 'warning'
-                    ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
-                    : 'bg-blue-50 border-blue-200 text-blue-800'
-                }`}
-              >
-                <p className="text-sm">{alert.message}</p>
-              </div>
-            ))}
-          </div>
+          <DataTable columns={recentCohortColumns} data={recentCohorts} />
         </Card>
+
+        {alerts.length > 0 && (
+          <Card>
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Alerts</h3>
+            </div>
+            <div className="p-6 space-y-3">
+              {alerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className={`p-4 rounded-lg border ${
+                    alert.type === 'warning'
+                      ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+                      : 'bg-blue-50 border-blue-200 text-blue-800'
+                  }`}
+                >
+                  <p className="text-sm">{alert.message}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
     </AdminLayout>
   );
