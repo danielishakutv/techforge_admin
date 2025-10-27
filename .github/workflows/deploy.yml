@@ -29,7 +29,7 @@ jobs:
           CI: false # Treats warnings as warnings, not errors
       
       - name: Deploy to server via SFTP
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.6
         with:
           server: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
@@ -40,6 +40,6 @@ jobs:
           # Ensure remote path points to the /admin directory root (e.g., /var/www/html/admin)
           remote_path: ${{ secrets.SERVER_PATH }}/
           sftp_only: true
-          # Replace existing files to avoid stale assets on the server
-          delete_remote_files: true
-          args: '-o ConnectTimeout=5'
+          # Do NOT delete remote files; only upload/overwrite to avoid removing server-managed files
+          delete_remote_files: false
+          sftpArgs: '-o ConnectTimeout=5'
