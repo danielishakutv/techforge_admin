@@ -7,15 +7,14 @@ import Drawer from '../components/ui/Drawer';
 import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
-import LabeledTextarea from '../components/ui/LabeledTextarea';
 import api from '../utils/api';
+import { toast } from 'react-toastify';
 
 export default function CohortsPage() {
   const [activeTab, setActiveTab] = useState('cohorts');
   const [streams, setStreams] = useState([]);
   const [cohorts, setCohorts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [instructors, setInstructors] = useState([]);
 
   useEffect(() => {
@@ -29,27 +28,17 @@ export default function CohortsPage() {
         ]);
         if (!mounted) return;
         
-        alert('Cohorts Response: ' + JSON.stringify(cResp));
-        console.log('Cohorts API Response:', cResp);
-        console.log('Streams API Response:', sResp);
-        console.log('Instructors API Response:', uResp);
-        
-        setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
+          // All responses now return { success, data, error } envelope
+          setStreams((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
         setCohorts(
-          Array.isArray(cResp)
-            ? cResp
-            : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : [])
+            (cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []
         );
         setInstructors(
-          Array.isArray(uResp)
-            ? uResp
-            : ((uResp && uResp.success && Array.isArray(uResp.data)) ? uResp.data : [])
+            (uResp && uResp.success && Array.isArray(uResp.data)) ? uResp.data : []
         );
-        
-        console.log('Cohorts state set to:', Array.isArray(cResp) ? cResp : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []));
       } catch (err) {
         console.error('Failed to load cohorts/streams:', err);
-        setError(err.message || 'Failed to load data');
+          toast.error('Failed to load data: ' + (err.message || 'Unknown error'));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -88,16 +77,17 @@ export default function CohortsPage() {
         if (resp && resp.success) {
           // refresh streams
           const sResp = await api.getStreams();
-          setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
+            setStreams((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
           setShowStreamModal(false);
           setNewStream({ title: '', duration_weeks: '' });
+            toast.success('Stream created successfully');
         } else {
           console.error('Create stream failed', resp && resp.error);
-          alert('Failed to create stream');
+            toast.error(resp?.error || 'Failed to create stream');
         }
       } catch (err) {
         console.error('Create stream error', err);
-        alert('Failed to create stream');
+          toast.error('Failed to create stream: ' + (err.message || 'Unknown error'));
       }
     })();
   };
@@ -117,26 +107,25 @@ export default function CohortsPage() {
           payload.end_date = newCohort.end_date;
         }
         if (!payload.stream_id || !payload.cohort_name || !payload.start_date || !payload.lead_instructor_id) {
-          alert('Please fill all required fields');
+            toast.error('Please fill all required fields');
           return;
         }
         const resp = await api.createCohort(payload);
         if (resp && resp.success) {
           const cResp = await api.getCohorts();
           setCohorts(
-            Array.isArray(cResp)
-              ? cResp
-              : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : [])
+              (cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []
           );
           setShowCohortModal(false);
           setNewCohort({ cohort_name: '', stream_id: '', lead_instructor_id: '', start_date: '', end_date: '', status: 'upcoming' });
+            toast.success('Cohort created successfully');
         } else {
           console.error('Create cohort failed', resp && resp.error);
-          alert('Failed to create cohort');
+            toast.error(resp?.error || 'Failed to create cohort');
         }
       } catch (err) {
         console.error('Create cohort error', err);
-        alert('Failed to create cohort');
+          toast.error('Failed to create cohort: ' + (err.message || 'Unknown error'));
       }
     })();
   };
@@ -321,16 +310,17 @@ export default function CohortsPage() {
                     const resp = await api.updateStream(editStream.id, payload);
                     if (resp && resp.success) {
                       const sResp = await api.getStreams();
-                      setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
+                        setStreams((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
                       setShowEditStreamModal(false);
                       setEditStream(null);
+                        toast.success('Stream updated successfully');
                     } else {
                       console.error('Update stream failed', resp && resp.error);
-                      alert('Failed to update stream');
+                        toast.error(resp?.error || 'Failed to update stream');
                     }
                   } catch (err) {
                     console.error('Update stream error', err);
-                    alert('Failed to update stream');
+                      toast.error('Failed to update stream: ' + (err.message || 'Unknown error'));
                   }
                 })();
               }}
@@ -469,19 +459,18 @@ export default function CohortsPage() {
                     if (resp && resp.success) {
                       const cResp = await api.getCohorts();
                       setCohorts(
-                        Array.isArray(cResp)
-                          ? cResp
-                          : ((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : [])
+                          (cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []
                       );
                       setShowEditCohortModal(false);
                       setEditCohort(null);
+                        toast.success('Cohort updated successfully');
                     } else {
                       console.error('Update cohort failed', resp && resp.error);
-                      alert('Failed to update cohort');
+                        toast.error(resp?.error || 'Failed to update cohort');
                     }
                   } catch (err) {
                     console.error('Update cohort error', err);
-                    alert('Failed to update cohort');
+                      toast.error('Failed to update cohort: ' + (err.message || 'Unknown error'));
                   }
                 })();
               }}
