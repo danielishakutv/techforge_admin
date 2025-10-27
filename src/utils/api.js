@@ -101,10 +101,15 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return apiRequest(`/admin/sessions${qs ? `?${qs}` : ''}`);
   },
-  createSession: (data) => apiRequest('/admin/sessions', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  createSession: (data) => {
+    const { cohort_id, ...rest } = data || {};
+    const qs = cohort_id ? `?cohort_id=${encodeURIComponent(cohort_id)}` : '';
+    return apiRequest(`/admin/sessions${qs}`, {
+      method: 'POST',
+      // Send remaining fields in body; some backends ignore cohort_id in body and require it in query
+      body: JSON.stringify({ ...rest, cohort_id }),
+    });
+  },
   getSession: (id) => apiRequest(`/admin/sessions/${id}`),
   updateSession: (id, data) => apiRequest(`/admin/sessions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSession: (id) => apiRequest(`/admin/sessions/${id}`, { method: 'DELETE' }),
