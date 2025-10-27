@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
+import LabeledTextarea from '../components/ui/LabeledTextarea';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
 
@@ -66,6 +67,9 @@ export default function SessionsPage() {
     start_datetime: '',
     end_datetime: '',
     instructor_id: '',
+    description: '',
+    meeting_link: '',
+    venue: '',
   });
 
   // Helper: fetch sessions for a given cohort id
@@ -101,7 +105,10 @@ export default function SessionsPage() {
         const payload = {
           cohort_id: parseInt(newSession.cohort_id, 10),
           title: newSession.title,
+          description: newSession.description || undefined,
           delivery_mode: newSession.delivery_mode,
+          ...(newSession.delivery_mode === 'online' && newSession.meeting_link ? { meeting_link: newSession.meeting_link } : {}),
+          ...(newSession.delivery_mode === 'physical' && newSession.venue ? { venue: newSession.venue } : {}),
           start_datetime: newSession.start_datetime,
           end_datetime: newSession.end_datetime,
           instructor_id: parseInt(newSession.instructor_id, 10),
@@ -110,7 +117,7 @@ export default function SessionsPage() {
         if (resp && resp.success) {
           await fetchSessionsByCohort(payload.cohort_id);
           setShowCreateModal(false);
-          setNewSession({ cohort_id: '', title: '', delivery_mode: 'online', start_datetime: '', end_datetime: '', instructor_id: '' });
+          setNewSession({ cohort_id: '', title: '', delivery_mode: 'online', start_datetime: '', end_datetime: '', instructor_id: '', description: '', meeting_link: '', venue: '' });
           setSelectedStreamId('');
           setFilterStreamId('');
           setFilterCohortId('');
@@ -346,6 +353,13 @@ export default function SessionsPage() {
               placeholder="e.g. Intro to JS"
               required
             />
+            <LabeledTextarea
+              label="Description"
+              value={newSession.description}
+              onChange={(e) => setNewSession({ ...newSession, description: e.target.value })}
+              placeholder="Brief description of this session"
+              rows={3}
+            />
             <LabeledSelect
               label="Delivery Mode"
               value={newSession.delivery_mode}
@@ -357,6 +371,25 @@ export default function SessionsPage() {
               ]}
               required
             />
+            {newSession.delivery_mode === 'online' && (
+              <LabeledInput
+                label="Meeting Link"
+                type="url"
+                value={newSession.meeting_link}
+                onChange={(e) => setNewSession({ ...newSession, meeting_link: e.target.value })}
+                placeholder="https://meet.example.com/your-session"
+                required
+              />
+            )}
+            {newSession.delivery_mode === 'physical' && (
+              <LabeledInput
+                label="Venue"
+                value={newSession.venue}
+                onChange={(e) => setNewSession({ ...newSession, venue: e.target.value })}
+                placeholder="e.g. Toko Academy, Room 201"
+                required
+              />
+            )}
             <LabeledInput
               label="Start Date & Time"
               type="datetime-local"
