@@ -13,9 +13,11 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [cohorts, setCohorts] = useState([]);
+  const [streams, setStreams] = useState([]);
   const [instructors, setInstructors] = useState([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editSession, setEditSession] = useState(null);
+  const [selectedStreamId, setSelectedStreamId] = useState('');
 
   const [newSession, setNewSession] = useState({
     cohort_id: '',
@@ -44,6 +46,7 @@ export default function SessionsPage() {
           setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
           setShowCreateModal(false);
           setNewSession({ cohort_id: '', title: '', delivery_mode: 'online', start_datetime: '', end_datetime: '', instructor_id: '' });
+          setSelectedStreamId('');
           toast.success('Session created successfully');
         } else {
           console.error('Create session failed', resp && resp.error);
@@ -99,15 +102,17 @@ export default function SessionsPage() {
     let mounted = true;
     async function load() {
       try {
-        const [sResp, cResp, iResp] = await Promise.all([
+        const [sResp, cResp, iResp, stResp] = await Promise.all([
           api.getSessions().catch(() => null),
           api.getCohorts().catch(() => null),
-          api.getInstructors().catch(() => null)
+          api.getInstructors().catch(() => null),
+          api.getStreams().catch(() => null)
         ]);
         if (!mounted) return;
         setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
         setCohorts((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
         setInstructors((iResp && iResp.success && Array.isArray(iResp.data)) ? iResp.data : []);
+        setStreams((stResp && stResp.success && Array.isArray(stResp.data)) ? stResp.data : []);
       } catch (err) {
         console.error('Failed to load sessions page data', err);
         toast.error('Failed to load sessions');
@@ -116,6 +121,16 @@ export default function SessionsPage() {
     load();
     return () => { mounted = false; };
   }, []);
+
+  // Auto-populate instructor when cohort is selected
+  useEffect(() => {
+    if (newSession.cohort_id) {
+      const selectedCohort = cohorts.find(c => c.id === parseInt(newSession.cohort_id, 10));
+      if (selectedCohort && selectedCohort.lead_instructor_id) {
+        setNewSession(prev => ({ ...prev, instructor_id: selectedCohort.lead_instructor_id.toString() }));
+      }
+    }
+  }, [newSession.cohort_id, cohorts]);
 
   const sessionColumns = [
     { header: 'Title', accessor: 'title' },
@@ -153,18 +168,36 @@ export default function SessionsPage() {
 
         <Modal
           isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => {
+            setShowCreateModal(false);
+            setSelectedStreamId('');
+            setNewSession({ cohort_id: '', title: '', delivery_mode: 'online', start_datetime: '', end_datetime: '', instructor_id: '' });
+          }}
           title="Schedule New Session"
           size="lg"
         >
           <form onSubmit={handleCreateSession} className="space-y-4">
             <LabeledSelect
+              label="Stream"
+              value={selectedStreamId}
+              onChange={(e) => {
+                setSelectedStreamId(e.target.value);
+                setNewSession({ ...newSession, cohort_id: '', instructor_id: '' });
+              }}
+              options={streams.map(s => ({ value: s.id.toString(), label: s.title }))}
+              placeholder="Select a stream"
+              required
+            />
+            <LabeledSelect
               label="Cohort"
               value={newSession.cohort_id}
               onChange={(e) => setNewSession({ ...newSession, cohort_id: e.target.value })}
-              options={cohorts.map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
+              options={cohorts
+                .filter(c => selectedStreamId ? c.stream_id === parseInt(selectedStreamId, 10) : false)
+                .map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
               placeholder="Select a cohort"
               required
+              disabled={!selectedStreamId}
             />
             <LabeledInput
               label="Title"
@@ -198,16 +231,22 @@ export default function SessionsPage() {
               onChange={(e) => setNewSession({ ...newSession, end_datetime: e.target.value })}
               required
             />
-            <LabeledSelect
-              label="Instructor"
-              value={newSession.instructor_id}
-              onChange={(e) => setNewSession({ ...newSession, instructor_id: e.target.value })}
-              options={instructors.map(u => ({
-                value: u.id.toString(),
-                label: u.profile ? [u.profile.first_name, u.profile.middle_name, u.profile.last_name].filter(Boolean).join(' ') || u.email : u.email,
-              }))}
-              placeholder="Select instructor"
-              required
+            <LabeledInput
+              label="Lead Instructor (Auto-filled)"
+              value={
+                newSession.instructor_id
+                  ? instructors.find(u => u.id === parseInt(newSession.instructor_id, 10))
+                      ?.profile
+                      ? [
+                          instructors.find(u => u.id === parseInt(newSession.instructor_id, 10))?.profile?.first_name,
+                          instructors.find(u => u.id === parseInt(newSession.instructor_id, 10))?.profile?.middle_name,
+                          instructors.find(u => u.id === parseInt(newSession.instructor_id, 10))?.profile?.last_name
+                        ].filter(Boolean).join(' ') || instructors.find(u => u.id === parseInt(newSession.instructor_id, 10))?.email
+                      : instructors.find(u => u.id === parseInt(newSession.instructor_id, 10))?.email || ''
+                  : ''
+              }
+              disabled
+              placeholder="Select a cohort to auto-fill instructor"
             />
             <div className="flex justify-end space-x-3 pt-4">
               <button
