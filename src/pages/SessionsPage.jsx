@@ -144,9 +144,23 @@ export default function SessionsPage() {
   const handleUpdateSession = () => {
     (async () => {
       try {
+        // Build description with optional VENUE suffix for physical sessions (same as create)
+        const baseDesc = (editSession.description || '').trim();
+        let computedDescription = baseDesc;
+        if (editSession.delivery_mode === 'physical' && editSession.venue) {
+          computedDescription = baseDesc
+            ? `${baseDesc} VENUE: ${editSession.venue}`
+            : `VENUE: ${editSession.venue}`;
+        }
+
         const payload = {
           title: editSession.title,
+          description: computedDescription || undefined,
+          delivery_mode: editSession.delivery_mode,
+          ...(editSession.delivery_mode === 'online' && editSession.meeting_link ? { meeting_link: editSession.meeting_link } : {}),
           start_datetime: editSession.start_datetime,
+          end_datetime: editSession.end_datetime,
+          instructor_id: parseInt(editSession.instructor_id, 10),
         };
         const resp = await api.updateSession(editSession.id, payload);
         if (resp && resp.success) {
@@ -451,6 +465,7 @@ export default function SessionsPage() {
           isOpen={showEditModal}
           onClose={() => setShowEditModal(false)}
           title="Edit Session"
+          size="lg"
         >
           {editSession && (
             <div className="space-y-4">
@@ -460,11 +475,68 @@ export default function SessionsPage() {
                 onChange={(e) => setEditSession({ ...editSession, title: e.target.value })}
                 required
               />
+              <LabeledTextarea
+                label="Description"
+                value={editSession.description || ''}
+                onChange={(e) => setEditSession({ ...editSession, description: e.target.value })}
+                placeholder="Brief description of this session"
+                rows={3}
+              />
+              <LabeledSelect
+                label="Delivery Mode"
+                value={editSession.delivery_mode}
+                onChange={(e) => setEditSession({ ...editSession, delivery_mode: e.target.value })}
+                options={[
+                  { value: 'online', label: 'Online' },
+                  { value: 'physical', label: 'Physical' },
+                  { value: 'hybrid', label: 'Hybrid' },
+                ]}
+                required
+              />
+              {editSession.delivery_mode === 'online' && (
+                <LabeledInput
+                  label="Meeting Link"
+                  type="url"
+                  value={editSession.meeting_link || ''}
+                  onChange={(e) => setEditSession({ ...editSession, meeting_link: e.target.value })}
+                  placeholder="https://meet.example.com/your-session"
+                  required
+                />
+              )}
+              {editSession.delivery_mode === 'physical' && (
+                <LabeledInput
+                  label="Venue"
+                  value={editSession.venue || ''}
+                  onChange={(e) => setEditSession({ ...editSession, venue: e.target.value })}
+                  placeholder="e.g. Toko Academy, Room 201"
+                  required
+                />
+              )}
               <LabeledInput
                 label="Start Date & Time"
                 type="datetime-local"
                 value={editSession.start_datetime}
                 onChange={(e) => setEditSession({ ...editSession, start_datetime: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="End Date & Time"
+                type="datetime-local"
+                value={editSession.end_datetime || ''}
+                onChange={(e) => setEditSession({ ...editSession, end_datetime: e.target.value })}
+                required
+              />
+              <LabeledSelect
+                label="Instructor"
+                value={editSession.instructor_id?.toString() || ''}
+                onChange={(e) => setEditSession({ ...editSession, instructor_id: e.target.value })}
+                options={instructors.map(u => ({
+                  value: u.id.toString(),
+                  label: u.profile
+                    ? [u.profile.first_name, u.profile.middle_name, u.profile.last_name].filter(Boolean).join(' ') || u.email
+                    : u.email,
+                }))}
+                placeholder="Select instructor"
                 required
               />
               <div className="flex justify-end space-x-3 pt-4">
