@@ -102,13 +102,21 @@ export default function SessionsPage() {
     e.preventDefault();
     (async () => {
       try {
+        // Build description with optional VENUE suffix for physical sessions
+        const baseDesc = (newSession.description || '').trim();
+        let computedDescription = baseDesc;
+        if (newSession.delivery_mode === 'physical' && newSession.venue) {
+          computedDescription = baseDesc
+            ? `${baseDesc} VENUE: ${newSession.venue}`
+            : `VENUE: ${newSession.venue}`;
+        }
+
         const payload = {
           cohort_id: parseInt(newSession.cohort_id, 10),
           title: newSession.title,
-          description: newSession.description || undefined,
+          description: computedDescription || undefined,
           delivery_mode: newSession.delivery_mode,
           ...(newSession.delivery_mode === 'online' && newSession.meeting_link ? { meeting_link: newSession.meeting_link } : {}),
-          ...(newSession.delivery_mode === 'physical' && newSession.venue ? { venue: newSession.venue } : {}),
           start_datetime: newSession.start_datetime,
           end_datetime: newSession.end_datetime,
           instructor_id: parseInt(newSession.instructor_id, 10),
