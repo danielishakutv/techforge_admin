@@ -22,6 +22,9 @@ export default function SessionsPage() {
   const [filterStreamId, setFilterStreamId] = useState('');
   const [filterCohortId, setFilterCohortId] = useState('');
   const activeFilterCount = (filterStreamId ? 1 : 0) + (filterCohortId ? 1 : 0);
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, cohortId, title }
 
   const [newSession, setNewSession] = useState({
     cohort_id: '',
@@ -113,11 +116,12 @@ export default function SessionsPage() {
   };
 
   const handleDeleteSession = async (id, cohortId) => {
-    if (!window.confirm('Delete this session?')) return;
     try {
       const resp = await api.deleteSession(id);
       if (resp && resp.success) {
         await fetchSessionsByCohort(cohortId);
+        setShowDeleteModal(false);
+        setDeleteTarget(null);
         toast.success('Session deleted');
       } else {
         toast.error(resp?.error || 'Failed to delete session');
@@ -180,7 +184,16 @@ export default function SessionsPage() {
       render: (row) => (
         <div className="flex space-x-2">
           <button onClick={(e) => { e.stopPropagation(); setEditSession(row); setShowEditModal(true); }} className="text-sm text-primary-600 hover:underline">Edit</button>
-          <button onClick={(e) => { e.stopPropagation(); handleDeleteSession(row.id, row.cohort_id); }} className="text-sm text-red-600 hover:underline">Delete</button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeleteTarget({ id: row.id, cohortId: row.cohort_id, title: row.title });
+              setShowDeleteModal(true);
+            }}
+            className="text-sm text-red-600 hover:underline"
+          >
+            Delete
+          </button>
         </div>
       ),
     },
@@ -378,6 +391,40 @@ export default function SessionsPage() {
               </div>
             </div>
           )}
+        </Modal>
+
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => { setShowDeleteModal(false); setDeleteTarget(null); }}
+          title="Delete Session"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              Are you sure you want to delete
+              {deleteTarget?.title ? (
+                <>
+                  {' '}<span className="font-semibold">{deleteTarget.title}</span>
+                </>
+              ) : null}
+              ? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => { setShowDeleteModal(false); setDeleteTarget(null); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteTarget && handleDeleteSession(deleteTarget.id, deleteTarget.cohortId)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </Modal>
       </div>
     </AdminLayout>
