@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import CohortsPage from './pages/CohortsPage';
 import SessionsPage from './pages/SessionsPage';
+import AttendancePage from './pages/AttendancePage';
 import AssignmentsPage from './pages/AssignmentsPage';
 import StudentsPage from './pages/StudentsPage';
 import CertificatesPage from './pages/CertificatesPage';
@@ -57,6 +58,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <SessionsPage />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/attendance"
+            element={
+              <ProtectedRoute>
+                <AttendancePage />
               </ProtectedRoute>
             }
           />

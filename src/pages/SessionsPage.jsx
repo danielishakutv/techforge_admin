@@ -261,7 +261,7 @@ export default function SessionsPage() {
   ];
 
   return (
-    <AdminLayout pageTitle="Sessions & Attendance">
+    <AdminLayout pageTitle="Sessions">
       <div className="space-y-6">
         <Card>
           <div className="p-6 border-b border-gray-200 flex items-center justify-between">

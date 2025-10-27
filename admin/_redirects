@@ -1,2 +1,0 @@
-# Netlify/Vercel redirects for SPA
-/admin/* /admin/index.html 200

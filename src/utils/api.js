@@ -113,10 +113,24 @@ export const api = {
   getSession: (id) => apiRequest(`/admin/sessions/${id}`),
   updateSession: (id, data) => apiRequest(`/admin/sessions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSession: (id) => apiRequest(`/admin/sessions/${id}`, { method: 'DELETE' }),
-  markAttendance: (data) => apiRequest('/attendance/mark', {
+
+  // Attendance (Full CRUD)
+  getStudentsForCohort: (cohortId) => apiRequest(`/admin/attendance/students?cohort_id=${cohortId}`),
+  getSessionAttendance: (sessionId) => apiRequest(`/admin/attendance/session/${sessionId}`),
+  getCohortAttendance: (cohortId) => apiRequest('/admin/attendance/cohort', {
+    method: 'POST',
+    body: JSON.stringify({ cohort_id: cohortId }),
+  }),
+  markAttendance: (data) => apiRequest('/admin/attendance/mark', {
     method: 'POST',
     body: JSON.stringify(data),
   }),
+  updateSingleAttendance: (sessionId, userId, status) => apiRequest(`/admin/attendance/session/${sessionId}/user/${userId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  }),
+  deleteSingleAttendance: (sessionId, userId) => apiRequest(`/admin/attendance/session/${sessionId}/user/${userId}`, { method: 'DELETE' }),
+  deleteSessionAttendance: (sessionId) => apiRequest(`/admin/attendance/session/${sessionId}/all`, { method: 'DELETE' }),
 
   // Assignments
   getAssignments: (params = {}) => {
