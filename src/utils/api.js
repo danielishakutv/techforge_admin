@@ -103,10 +103,10 @@ export const api = {
   },
   createSession: (data) => {
     const { cohort_id, ...rest } = data || {};
+    // Backend requires cohort_id as a query parameter
     const qs = cohort_id ? `?cohort_id=${encodeURIComponent(cohort_id)}` : '';
     return apiRequest(`/admin/sessions${qs}`, {
       method: 'POST',
-      // Send remaining fields in body; some backends ignore cohort_id in body and require it in query
       body: JSON.stringify({ ...rest, cohort_id }),
     });
   },
