@@ -28,17 +28,14 @@ jobs:
         env:
           CI: false # Treats warnings as warnings, not errors
       
-      - name: Deploy to server via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Deploy to server via SFTP
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./build/
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          protocol: ftps # Change to 'ftp' if your server doesn't support FTPS
-          port: 21 # Default FTP port, change if different
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
+          server: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          local_path: './build/*'
+          remote_path: ${{ secrets.SERVER_PATH }}
+          sftp_only: true
+          delete_remote_files: false
