@@ -12,8 +12,7 @@ export default function StudentsPage() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [streamFilter, setStreamFilter] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  
 
   useEffect(() => {
     let mounted = true;
@@ -24,9 +23,8 @@ export default function StudentsPage() {
         setStudents((resp && resp.success && resp.data.items) || []);
       } catch (err) {
         console.error('Failed to load students', err);
-        setError(err.message || 'Failed to load students');
       } finally {
-        if (mounted) setLoading(false);
+        // no-op
       }
     }
     load();

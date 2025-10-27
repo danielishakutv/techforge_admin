@@ -18,6 +18,9 @@ export default function SessionsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editSession, setEditSession] = useState(null);
   const [selectedStreamId, setSelectedStreamId] = useState('');
+  // Listing filters
+  const [filterStreamId, setFilterStreamId] = useState('');
+  const [filterCohortId, setFilterCohortId] = useState('');
 
   const [newSession, setNewSession] = useState({
     cohort_id: '',
@@ -27,6 +30,17 @@ export default function SessionsPage() {
     end_datetime: '',
     instructor_id: '',
   });
+
+  // Helper: fetch sessions for a given cohort id
+  const fetchSessionsByCohort = async (cohortId) => {
+    if (!cohortId) return;
+    try {
+      const sResp = await api.getSessions({ cohort_id: cohortId });
+      setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+    } catch (err) {
+      toast.error('Failed to load sessions');
+    }
+  };
 
   const handleCreateSession = (e) => {
     e.preventDefault();
@@ -42,11 +56,12 @@ export default function SessionsPage() {
         };
         const resp = await api.createSession(payload);
         if (resp && resp.success) {
-          const sResp = await api.getSessions({ cohort_id: payload.cohort_id });
-          setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+          await fetchSessionsByCohort(payload.cohort_id);
           setShowCreateModal(false);
           setNewSession({ cohort_id: '', title: '', delivery_mode: 'online', start_datetime: '', end_datetime: '', instructor_id: '' });
           setSelectedStreamId('');
+          setFilterStreamId('');
+          setFilterCohortId('');
           toast.success('Session created successfully');
         } else {
           console.error('Create session failed', resp && resp.error);
@@ -68,8 +83,7 @@ export default function SessionsPage() {
         };
         const resp = await api.updateSession(editSession.id, payload);
         if (resp && resp.success) {
-          const sResp = await api.getSessions({ cohort_id: editSession.cohort_id });
-          setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+          await fetchSessionsByCohort(editSession.cohort_id);
           setShowEditModal(false);
           setEditSession(null);
           toast.success('Session updated successfully');
@@ -87,8 +101,7 @@ export default function SessionsPage() {
     try {
       const resp = await api.deleteSession(id);
       if (resp && resp.success) {
-        const sResp = await api.getSessions(cohortId ? { cohort_id: cohortId } : {});
-        setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+        await fetchSessionsByCohort(cohortId);
         toast.success('Session deleted');
       } else {
         toast.error(resp?.error || 'Failed to delete session');
@@ -102,7 +115,6 @@ export default function SessionsPage() {
     let mounted = true;
     async function load() {
       try {
-        // Load cohorts/instructors/streams first
         const [cResp, iResp, stResp] = await Promise.all([
           api.getCohorts().catch(() => null),
           api.getInstructors().catch(() => null),
@@ -113,12 +125,11 @@ export default function SessionsPage() {
         setCohorts(cData);
         setInstructors((iResp && iResp.success && Array.isArray(iResp.data)) ? iResp.data : []);
         setStreams((stResp && stResp.success && Array.isArray(stResp.data)) ? stResp.data : []);
-
-        // Refresh sessions only when we have a cohort_id to query with
         if (cData.length > 0) {
-          const defaultCohortId = cData[0].id;
-          const sResp = await api.getSessions({ cohort_id: defaultCohortId }).catch(() => null);
-          setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
+          const def = cData[0];
+          setFilterStreamId(def.stream_id?.toString?.() || '');
+          setFilterCohortId(def.id?.toString?.() || '');
+          await fetchSessionsByCohort(def.id);
         } else {
           setSessions([]);
         }
@@ -171,6 +182,37 @@ export default function SessionsPage() {
             >
               Schedule New Session
             </button>
+          </div>
+          {/* Filters */}
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <LabeledSelect
+                label="Filter by Stream"
+                value={filterStreamId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterStreamId(val);
+                  setFilterCohortId('');
+                  setSessions([]);
+                }}
+                options={streams.map(s => ({ value: s.id.toString(), label: s.title }))}
+                placeholder="Select a stream"
+              />
+              <LabeledSelect
+                label="Filter by Cohort"
+                value={filterCohortId}
+                onChange={async (e) => {
+                  const cid = e.target.value;
+                  setFilterCohortId(cid);
+                  if (cid) await fetchSessionsByCohort(parseInt(cid, 10));
+                }}
+                options={cohorts
+                  .filter(c => filterStreamId ? c.stream_id === parseInt(filterStreamId, 10) : false)
+                  .map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
+                placeholder={filterStreamId ? 'Select a cohort' : 'Select a stream first'}
+                disabled={!filterStreamId}
+              />
+            </div>
           </div>
           <DataTable columns={sessionColumns} data={sessions} />
         </Card>

@@ -6,16 +6,13 @@ import Modal from '../components/ui/Modal';
 import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import api from '../utils/api';
-import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 
 export default function CertificatesPage() {
   const [certificates, setCertificates] = useState([]);
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [issueForm, setIssueForm] = useState({ user_id: '', enrollment_id: '' });
-  const { adminUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  
 
   useEffect(() => {
     let mounted = true;
@@ -28,7 +25,7 @@ export default function CertificatesPage() {
         console.error('Failed to load certificates', err);
         toast.error('Failed to load certificates');
       } finally {
-        if (mounted) setLoading(false);
+        // no-op
       }
     }
     load();

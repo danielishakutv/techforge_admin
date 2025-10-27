@@ -14,7 +14,6 @@ export default function CohortsPage() {
   const [activeTab, setActiveTab] = useState('cohorts');
   const [streams, setStreams] = useState([]);
   const [cohorts, setCohorts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [instructors, setInstructors] = useState([]);
 
   useEffect(() => {
@@ -40,7 +39,7 @@ export default function CohortsPage() {
         console.error('Failed to load cohorts/streams:', err);
           toast.error('Failed to load data: ' + (err.message || 'Unknown error'));
       } finally {
-        if (mounted) setLoading(false);
+        // no-op
       }
     }
     load();

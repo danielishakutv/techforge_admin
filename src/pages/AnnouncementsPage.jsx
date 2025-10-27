@@ -7,7 +7,6 @@ import LabeledSelect from '../components/ui/LabeledSelect';
 import LabeledTextarea from '../components/ui/LabeledTextarea';
 import AnnouncementAudienceBadge from '../components/ui/AnnouncementAudienceBadge';
 import api from '../utils/api';
-import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 
 export default function AnnouncementsPage() {
@@ -17,8 +16,7 @@ export default function AnnouncementsPage() {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [streams, setStreams] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { adminUser } = useAuth();
+  
 
   const handleSendAnnouncement = (e) => {
     e.preventDefault();
@@ -62,7 +60,7 @@ export default function AnnouncementsPage() {
         console.error('Failed to load announcements', err);
         toast.error('Failed to load announcements');
       } finally {
-        if (mounted) setLoading(false);
+        // no-op
       }
     }
     load();
