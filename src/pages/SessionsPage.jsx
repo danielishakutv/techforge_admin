@@ -21,6 +21,7 @@ export default function SessionsPage() {
   // Listing filters
   const [filterStreamId, setFilterStreamId] = useState('');
   const [filterCohortId, setFilterCohortId] = useState('');
+  const activeFilterCount = (filterStreamId ? 1 : 0) + (filterCohortId ? 1 : 0);
 
   const [newSession, setNewSession] = useState({
     cohort_id: '',
@@ -39,6 +40,21 @@ export default function SessionsPage() {
       setSessions((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
     } catch (err) {
       toast.error('Failed to load sessions');
+    }
+  };
+
+  const handleClearFilters = async () => {
+    if (cohorts && cohorts.length > 0) {
+      const def = cohorts[0];
+      const sId = def.stream_id?.toString?.() || '';
+      const cId = def.id?.toString?.() || '';
+      setFilterStreamId(sId);
+      setFilterCohortId(cId);
+      if (cId) await fetchSessionsByCohort(def.id);
+    } else {
+      setFilterStreamId('');
+      setFilterCohortId('');
+      setSessions([]);
     }
   };
 
@@ -185,6 +201,25 @@ export default function SessionsPage() {
           </div>
           {/* Filters */}
           <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs">
+                {activeFilterCount > 0 ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    Filters active: {activeFilterCount}
+                  </span>
+                ) : (
+                  <span className="text-gray-500">No filters</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="text-xs text-gray-600 hover:text-gray-800 disabled:text-gray-300"
+                disabled={activeFilterCount === 0}
+              >
+                Clear filters
+              </button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <LabeledSelect
                 label="Filter by Stream"
