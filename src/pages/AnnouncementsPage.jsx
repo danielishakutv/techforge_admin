@@ -8,6 +8,7 @@ import LabeledTextarea from '../components/ui/LabeledTextarea';
 import AnnouncementAudienceBadge from '../components/ui/AnnouncementAudienceBadge';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'react-toastify';
 
 export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState([]);
@@ -17,7 +18,6 @@ export default function AnnouncementsPage() {
   const [message, setMessage] = useState('');
   const [streams, setStreams] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const { adminUser } = useAuth();
 
   const handleSendAnnouncement = (e) => {
@@ -25,26 +25,27 @@ export default function AnnouncementsPage() {
     (async () => {
       try {
         const payload = {
+          audience_type: audienceType,
           title,
-          message,
-          audienceType,
-          stream: audienceType === 'stream' ? selectedStream : null,
+          message_body: message,
+          ...(audienceType === 'stream' && selectedStream ? { stream_id: parseInt(selectedStream, 10) } : {}),
         };
         const resp = await api.broadcastAnnouncement(payload);
         if (resp && resp.success) {
           const aResp = await api.getRecentAnnouncements();
-          setAnnouncements((aResp && aResp.success && aResp.data.items) || []);
+          setAnnouncements((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
           setTitle('');
           setMessage('');
           setAudienceType('global');
           setSelectedStream('');
+          toast.success('Announcement broadcast successfully');
         } else {
           console.error('Failed to send announcement', resp && resp.error);
-          alert('Failed to send announcement');
+          toast.error(resp?.error || 'Failed to send announcement');
         }
       } catch (err) {
         console.error('Send announcement error', err);
-        alert('Failed to send announcement');
+        toast.error('Failed to send announcement: ' + (err.message || 'Unknown error'));
       }
     })();
   };
@@ -55,11 +56,11 @@ export default function AnnouncementsPage() {
       try {
   const [aResp, sResp] = await Promise.all([api.getRecentAnnouncements().catch(() => null), api.getStreams().catch(() => null)]);
         if (!mounted) return;
-  setAnnouncements((aResp && aResp.success && aResp.data.items) || []);
-  setStreams((sResp && sResp.success && Array.isArray(sResp.data) ? sResp.data : []) || []);
+  setAnnouncements((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+  setStreams((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
       } catch (err) {
         console.error('Failed to load announcements', err);
-        setError(err.message || 'Failed to load announcements');
+        toast.error('Failed to load announcements');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -75,27 +76,24 @@ export default function AnnouncementsPage() {
     },
     {
       header: 'Audience',
-      render: (row) => <AnnouncementAudienceBadge audienceType={row.audienceType} stream={row.stream} />,
+      render: (row) => <AnnouncementAudienceBadge audienceType={row.audience_type} stream={streams.find(s => s.id === row.stream_id)?.title} />,
     },
     {
-      header: 'Sent By',
-      accessor: 'sentBy',
+      header: 'Delivered',
+      render: (row) => `${row.delivered_count ?? 0}`,
     },
     {
       header: 'Sent At',
       render: (row) => {
-        const date = new Date(row.sentAt);
+        const ts = row.sent_at || row.created_at;
+        const date = ts ? new Date(ts) : null;
         return (
           <div>
-            <p className="text-sm">{date.toLocaleDateString('en-NG')}</p>
-            <p className="text-xs text-gray-500">{date.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })} WAT</p>
+            <p className="text-sm">{date ? date.toLocaleDateString('en-NG') : '—'}</p>
+            <p className="text-xs text-gray-500">{date ? date.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' }) + ' WAT' : ''}</p>
           </div>
         );
       },
-    },
-    {
-      header: 'Delivered Count',
-      render: (row) => `${row.deliveredCount} students reached`,
     },
   ];
 
@@ -144,7 +142,7 @@ export default function AnnouncementsPage() {
                 label="Select Stream"
                 value={selectedStream}
                 onChange={(e) => setSelectedStream(e.target.value)}
-                options={streams.map(s => ({ value: s.title, label: s.title }))}
+                options={streams.map(s => ({ value: s.id.toString(), label: s.title }))}
                 placeholder="Choose a stream"
                 required
               />

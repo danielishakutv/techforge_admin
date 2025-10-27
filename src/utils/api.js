@@ -81,6 +81,7 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
+  deleteStream: (id) => apiRequest(`/admin/streams/${id}`, { method: 'DELETE' }),
 
   // Cohorts
   getCohorts: () => apiRequest('/admin/cohorts'),
@@ -93,26 +94,37 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(data),
   }),
+  deleteCohort: (id) => apiRequest(`/admin/cohorts/${id}`, { method: 'DELETE' }),
 
   // Sessions
-  getSessions: () => apiRequest('/admin/sessions'),
+  getSessions: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/sessions${qs ? `?${qs}` : ''}`);
+  },
   createSession: (data) => apiRequest('/admin/sessions', {
     method: 'POST',
     body: JSON.stringify(data),
   }),
   getSession: (id) => apiRequest(`/admin/sessions/${id}`),
+  updateSession: (id, data) => apiRequest(`/admin/sessions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSession: (id) => apiRequest(`/admin/sessions/${id}`, { method: 'DELETE' }),
   markAttendance: (data) => apiRequest('/attendance/mark', {
     method: 'POST',
     body: JSON.stringify(data),
   }),
 
   // Assignments
-  getAssignments: () => apiRequest('/admin/assignments'),
+  getAssignments: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/assignments${qs ? `?${qs}` : ''}`);
+  },
   createAssignment: (data) => apiRequest('/admin/assignments', {
     method: 'POST',
     body: JSON.stringify(data),
   }),
   getAssignment: (id) => apiRequest(`/admin/assignments/${id}`),
+  updateAssignment: (id, data) => apiRequest(`/admin/assignments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAssignment: (id) => apiRequest(`/admin/assignments/${id}`, { method: 'DELETE' }),
   gradeSubmission: (submissionId, data) => apiRequest(`/submissions/${submissionId}/grade`, {
     method: 'POST',
     body: JSON.stringify(data),
@@ -128,6 +140,12 @@ export const api = {
 
   // Users (Instructors)
   getInstructors: () => apiRequest('/admin/users?role=instructor'),
+  getUsers: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/users${qs ? `?${qs}` : ''}`);
+  },
+  updateUser: (id, data) => apiRequest(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteUser: (id) => apiRequest(`/admin/users/${id}`, { method: 'DELETE' }),
 
   // Current user / profile
   // NOTE: backend may expose a 'me' endpoint. Adjust path if your API differs.
@@ -143,9 +161,11 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(data),
   }),
-  revokeCertificate: (id) => apiRequest(`/admin/certificates/${id}`, {
-    method: 'DELETE',
+  revokeCertificate: (certificate_id) => apiRequest('/admin/certificates/revoke', {
+    method: 'POST',
+    body: JSON.stringify({ certificate_id }),
   }),
+  deleteCertificate: (id) => apiRequest(`/admin/certificates/${id}`, { method: 'DELETE' }),
 
   // Announcements
   broadcastAnnouncement: (data) => apiRequest('/admin/announcements/broadcast', {
@@ -153,6 +173,8 @@ export const api = {
     body: JSON.stringify(data),
   }),
   getRecentAnnouncements: () => apiRequest('/admin/announcements/recent'),
+  updateAnnouncement: (id, data) => apiRequest(`/admin/announcements/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAnnouncement: (id) => apiRequest(`/admin/announcements/${id}`, { method: 'DELETE' }),
 };
 
 export default api;

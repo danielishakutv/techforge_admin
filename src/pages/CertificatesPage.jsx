@@ -7,11 +7,12 @@ import StatusBadge from '../components/ui/StatusBadge';
 import LabeledInput from '../components/ui/LabeledInput';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'react-toastify';
 
 export default function CertificatesPage() {
   const [certificates, setCertificates] = useState([]);
   const [showIssueModal, setShowIssueModal] = useState(false);
-  const [selectedCertificate, setSelectedCertificate] = useState(null);
+  const [issueForm, setIssueForm] = useState({ user_id: '', enrollment_id: '' });
   const { adminUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,10 +23,10 @@ export default function CertificatesPage() {
       try {
         const resp = await api.getCertificates();
         if (!mounted) return;
-        setCertificates((resp && resp.success && resp.data.items) || []);
+        setCertificates((resp && resp.success && Array.isArray(resp.data)) ? resp.data : []);
       } catch (err) {
         console.error('Failed to load certificates', err);
-        setError(err.message || 'Failed to load certificates');
+        toast.error('Failed to load certificates');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -37,86 +38,95 @@ export default function CertificatesPage() {
   const handleIssueCertificate = () => {
     (async () => {
       try {
-        const resp = await api.issueCertificate({ id: selectedCertificate.id });
+        const payload = {
+          user_id: parseInt(issueForm.user_id, 10),
+          enrollment_id: parseInt(issueForm.enrollment_id, 10),
+        };
+        if (!payload.user_id || !payload.enrollment_id) {
+          toast.error('User ID and Enrollment ID are required');
+          return;
+        }
+        const resp = await api.issueCertificate(payload);
         if (resp && resp.success) {
           const cResp = await api.getCertificates();
-          setCertificates((cResp && cResp.success && cResp.data.items) || []);
+          setCertificates((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
           setShowIssueModal(false);
-          setSelectedCertificate(null);
+          setIssueForm({ user_id: '', enrollment_id: '' });
+          toast.success('Certificate issued');
         } else {
           console.error('Issue certificate failed', resp && resp.error);
-          alert('Failed to issue certificate');
+          toast.error(resp?.error || 'Failed to issue certificate');
         }
       } catch (err) {
         console.error('Issue certificate error', err);
-        alert('Failed to issue certificate');
+        toast.error('Failed to issue certificate: ' + (err.message || 'Unknown error'));
       }
     })();
   };
 
+  const handleRevoke = async (row) => {
+    try {
+      const resp = await api.revokeCertificate(row.id);
+      if (resp && resp.success) {
+        const cResp = await api.getCertificates();
+        setCertificates((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
+        toast.success('Certificate revoked');
+      } else {
+        toast.error(resp?.error || 'Failed to revoke certificate');
+      }
+    } catch (err) {
+      toast.error('Failed to revoke certificate');
+    }
+  };
+
+  const handleDelete = async (row) => {
+    try {
+      const resp = await api.deleteCertificate(row.id);
+      if (resp && resp.success) {
+        const cResp = await api.getCertificates();
+        setCertificates((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
+        toast.success('Certificate deleted');
+      } else {
+        toast.error(resp?.error || 'Failed to delete certificate');
+      }
+    } catch (err) {
+      toast.error('Failed to delete certificate');
+    }
+  };
+
   const certificateColumns = [
     {
-      header: 'Student Name',
-      accessor: 'studentName',
-    },
-    {
-      header: 'Stream / Cohort',
-      render: (row) => (
-        <div>
-          <p className="font-medium">{row.stream}</p>
-          <p className="text-xs text-gray-500">{row.cohort}</p>
-        </div>
-      ),
-    },
-    {
-      header: 'Eligibility Status',
-      render: (row) => <StatusBadge status={row.eligibilityStatus} />,
-    },
-    {
-      header: 'Certificate Number',
-      render: (row) => row.certificateNumber || '—',
+      header: 'Certificate #',
+      accessor: 'certificate_number',
     },
     {
       header: 'Issued Date',
-      render: (row) => row.issuedDate ? new Date(row.issuedDate).toLocaleDateString('en-NG') : '—',
+      render: (row) => row.issued_date ? new Date(row.issued_date).toLocaleDateString('en-NG') : '—',
+    },
+    {
+      header: 'Status',
+      render: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      header: 'Download',
+      render: (row) => row.download_url ? (
+        <a href={row.download_url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">PDF</a>
+      ) : '—',
     },
     {
       header: 'Actions',
       render: (row) => (
         <div className="flex space-x-2">
-          {row.eligibilityStatus === 'Eligible' && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedCertificate(row);
-                setShowIssueModal(true);
-              }}
-              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-            >
-              Issue
-            </button>
-          )}
-          {row.eligibilityStatus === 'Issued' && (
+          <button onClick={(e) => { e.stopPropagation(); setShowIssueModal(true); }} className="text-sm text-primary-600 hover:text-primary-700 font-medium">Issue</button>
+          {row.status === 'issued' && (
             <>
-              <a
-                href={row.pdfUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-              >
-                View PDF
-              </a>
-              {adminUser?.isAdmin && (
-                <button
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-sm text-red-600 hover:text-red-700 font-medium"
-                >
-                  Revoke
-                </button>
+              {row.download_url && (
+                <a href={row.download_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-sm text-primary-600 hover:text-primary-700 font-medium">View</a>
               )}
+              <button onClick={(e) => { e.stopPropagation(); handleRevoke(row); }} className="text-sm text-red-600 hover:text-red-700 font-medium">Revoke</button>
             </>
           )}
+          <button onClick={(e) => { e.stopPropagation(); handleDelete(row); }} className="text-sm text-gray-600 hover:text-gray-700 font-medium">Delete</button>
         </div>
       ),
     },
@@ -138,41 +148,26 @@ export default function CertificatesPage() {
           onClose={() => setShowIssueModal(false)}
           title="Issue Certificate"
         >
-          {selectedCertificate && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <p className="text-sm"><span className="font-medium">Student:</span> {selectedCertificate.studentName}</p>
-                <p className="text-sm"><span className="font-medium">Stream:</span> {selectedCertificate.stream}</p>
-                <p className="text-sm"><span className="font-medium">Cohort:</span> {selectedCertificate.cohort}</p>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Certificate Number Preview:</strong><br />
-                  TFB-{selectedCertificate.stream.split(' ')[0].substring(0, 2).toUpperCase()}-2025-{String(certificates.length + 100).padStart(5, '0')}
-                </p>
-              </div>
-
-              <p className="text-sm text-gray-600">
-                Confirm that you want to issue a certificate to this student. Once issued, the certificate will be available for download.
-              </p>
-
-              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => setShowIssueModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleIssueCertificate}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-                >
-                  Confirm Issue
-                </button>
-              </div>
+          <div className="space-y-4">
+            <LabeledInput
+              label="User ID"
+              value={issueForm.user_id}
+              onChange={(e) => setIssueForm({ ...issueForm, user_id: e.target.value })}
+              placeholder="10"
+              required
+            />
+            <LabeledInput
+              label="Enrollment ID"
+              value={issueForm.enrollment_id}
+              onChange={(e) => setIssueForm({ ...issueForm, enrollment_id: e.target.value })}
+              placeholder="2"
+              required
+            />
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button onClick={() => setShowIssueModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium">Cancel</button>
+              <button onClick={handleIssueCertificate} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">Issue Certificate</button>
             </div>
-          )}
+          </div>
         </Modal>
       </div>
     </AdminLayout>
