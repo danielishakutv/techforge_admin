@@ -31,6 +31,27 @@ export default function AssignmentsPage() {
     max_score: 100,
   });
 
+  // Helpers
+  const toJSDate = (s) => {
+    if (!s) return null;
+    // Accept both "YYYY-MM-DDTHH:mm[:ss]" and "YYYY-MM-DD HH:mm[:ss]"
+    const str = s.includes('T') ? s : s.replace(' ', 'T');
+    return new Date(str);
+  };
+
+  const formatForInput = (s) => {
+    // Convert API datetime to input[type=datetime-local] (YYYY-MM-DDTHH:mm)
+    const d = toJSDate(s);
+    if (!d || isNaN(d.getTime())) return '';
+    const pad = (n) => `${n}`.padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const HH = pad(d.getHours());
+    const MM = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${HH}:${MM}`;
+  };
+
   const handleCreateAssignment = (e) => {
     e.preventDefault();
     (async () => {
@@ -155,17 +176,30 @@ export default function AssignmentsPage() {
   };
 
   const assignmentColumns = [
-    { header: 'Title', accessor: 'title' },
-    { header: 'Cohort ID', accessor: 'cohort_id' },
-    { header: 'Due', render: (row) => row.due_datetime ? new Date(row.due_datetime).toLocaleString('en-NG') : '—' },
-    { header: 'Max Score', accessor: 'max_score' },
-    { header: 'Response Type', accessor: 'response_type' },
+    { header: 'Title', render: (row) => row.assignment?.title || '—' },
+    { header: 'Due', render: (row) => row.assignment?.due_datetime ? toJSDate(row.assignment.due_datetime).toLocaleString('en-NG') : '—' },
+    { header: 'Response Type', render: (row) => row.assignment?.response_type || '—' },
+    { header: 'Max Score', render: (row) => row.assignment?.max_score ?? '—' },
+    { header: 'Status', render: (row) => row.assignment?.status || '—' },
+    {
+      header: 'Submissions',
+      render: (row) => {
+        const sc = row.submission_counts || {};
+        return (
+          <div className="text-xs text-gray-700">
+            <span className="mr-3"><span className="font-medium">Submitted:</span> {sc.submitted ?? 0}</span>
+            <span className="mr-3"><span className="font-medium">Graded:</span> {sc.graded ?? 0}</span>
+            <span><span className="font-medium">Resub Req:</span> {sc.resubmission_requested ?? 0}</span>
+          </div>
+        );
+      },
+    },
     {
       header: 'Actions',
       render: (row) => (
         <div className="flex space-x-2">
-          <button onClick={(e) => { e.stopPropagation(); setEditAssignment(row); setShowEditModal(true); }} className="text-sm text-primary-600 hover:underline">Edit</button>
-          <button onClick={(e) => { e.stopPropagation(); setAssignmentToDelete(row); setShowDeleteModal(true); }} className="text-sm text-red-600 hover:underline">Delete</button>
+          <button onClick={(e) => { e.stopPropagation(); setEditAssignment(row.assignment); setShowEditModal(true); }} className="text-sm text-primary-600 hover:underline">Edit</button>
+          <button onClick={(e) => { e.stopPropagation(); setAssignmentToDelete(row.assignment); setShowDeleteModal(true); }} className="text-sm text-red-600 hover:underline">Delete</button>
         </div>
       ),
     },
@@ -240,7 +274,7 @@ export default function AssignmentsPage() {
               data={assignments.filter(a => {
                 const term = searchTerm.trim().toLowerCase();
                 if (!term) return true;
-                return (a.title || '').toLowerCase().includes(term);
+                return (a.assignment?.title || '').toLowerCase().includes(term);
               })}
             />
           ) : (
@@ -346,7 +380,7 @@ export default function AssignmentsPage() {
               <LabeledInput
                 label="Due Date & Time"
                 type="datetime-local"
-                value={editAssignment.due_datetime}
+                value={formatForInput(editAssignment.due_datetime)}
                 onChange={(e) => setEditAssignment({ ...editAssignment, due_datetime: e.target.value })}
                 required
               />
