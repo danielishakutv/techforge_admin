@@ -9,10 +9,18 @@ import api from '../utils/api';
 import { toast } from 'react-toastify';
 
 export default function AssignmentsPage() {
-  const [assignments, setAssignments] = useState([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [streams, setStreams] = useState([]);
   const [cohorts, setCohorts] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [selectedStreamId, setSelectedStreamId] = useState('');
+  const [selectedCohortId, setSelectedCohortId] = useState('');
+
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [assignmentToDelete, setAssignmentToDelete] = useState(null);
   const [editAssignment, setEditAssignment] = useState(null);
 
   const [newAssignment, setNewAssignment] = useState({
@@ -36,8 +44,11 @@ export default function AssignmentsPage() {
         };
         const resp = await api.createAssignment(payload);
         if (resp && resp.success) {
-          const aResp = await api.getAssignments();
-          setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+          // Reload assignments for the selected cohort if available
+          if (selectedCohortId) {
+            const aResp = await api.getAssignments({ cohort_id: selectedCohortId });
+            setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+          }
           setShowCreateModal(false);
           setNewAssignment({ title: '', cohort_id: '', due_datetime: '', response_type: 'text', max_score: 100 });
           toast.success('Assignment created successfully');
@@ -61,8 +72,10 @@ export default function AssignmentsPage() {
         };
         const resp = await api.updateAssignment(editAssignment.id, payload);
         if (resp && resp.success) {
-          const aResp = await api.getAssignments();
-          setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+          if (selectedCohortId) {
+            const aResp = await api.getAssignments({ cohort_id: selectedCohortId });
+            setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+          }
           setShowEditModal(false);
           setEditAssignment(null);
           toast.success('Assignment updated successfully');
@@ -76,13 +89,16 @@ export default function AssignmentsPage() {
   };
 
   const handleDeleteAssignment = async (id) => {
-    if (!window.confirm('Delete this assignment?')) return;
     try {
       const resp = await api.deleteAssignment(id);
       if (resp && resp.success) {
-        const aResp = await api.getAssignments();
-        setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+        if (selectedCohortId) {
+          const aResp = await api.getAssignments({ cohort_id: selectedCohortId });
+          setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+        }
         toast.success('Assignment deleted');
+        setShowDeleteModal(false);
+        setAssignmentToDelete(null);
       } else {
         toast.error(resp?.error || 'Failed to delete assignment');
       }
@@ -93,20 +109,50 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     let mounted = true;
-    async function load() {
+    async function loadFilters() {
       try {
-        const [aResp, cResp] = await Promise.all([api.getAssignments().catch(() => null), api.getCohorts().catch(() => null)]);
+        const [sResp, cResp] = await Promise.all([
+          api.getStreams().catch(() => null),
+          api.getCohorts().catch(() => null),
+        ]);
         if (!mounted) return;
-        setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+        setStreams((sResp && sResp.success && Array.isArray(sResp.data)) ? sResp.data : []);
         setCohorts((cResp && cResp.success && Array.isArray(cResp.data)) ? cResp.data : []);
       } catch (err) {
-        console.error('Failed to load assignments page data', err);
-        toast.error('Failed to load assignments');
+        toast.error('Failed to load filters');
       }
     }
-    load();
+    loadFilters();
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    // When cohort changes, query assignments for that cohort
+    if (!selectedCohortId) {
+      setAssignments([]);
+      return;
+    }
+    (async () => {
+      try {
+        const aResp = await api.getAssignments({ cohort_id: selectedCohortId });
+        setAssignments((aResp && aResp.success && Array.isArray(aResp.data)) ? aResp.data : []);
+      } catch (err) {
+        toast.error('Failed to load assignments');
+      }
+    })();
+  }, [selectedCohortId]);
+
+  const handleStreamChange = (e) => {
+    const val = e.target.value;
+    setSelectedStreamId(val);
+    setSelectedCohortId('');
+    setAssignments([]);
+  };
+
+  const handleCohortChange = (e) => {
+    const val = e.target.value;
+    setSelectedCohortId(val);
+  };
 
   const assignmentColumns = [
     { header: 'Title', accessor: 'title' },
@@ -119,26 +165,87 @@ export default function AssignmentsPage() {
       render: (row) => (
         <div className="flex space-x-2">
           <button onClick={(e) => { e.stopPropagation(); setEditAssignment(row); setShowEditModal(true); }} className="text-sm text-primary-600 hover:underline">Edit</button>
-          <button onClick={(e) => { e.stopPropagation(); handleDeleteAssignment(row.id); }} className="text-sm text-red-600 hover:underline">Delete</button>
+          <button onClick={(e) => { e.stopPropagation(); setAssignmentToDelete(row); setShowDeleteModal(true); }} className="text-sm text-red-600 hover:underline">Delete</button>
         </div>
       ),
     },
   ];
 
   return (
-    <AdminLayout pageTitle="Assignments & Grading">
+    <AdminLayout pageTitle="Assignments">
       <div className="space-y-6">
         <Card>
-          <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">All Assignments</h3>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-            >
-              Create Assignment
-            </button>
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Manage Assignments</h3>
+            <p className="text-sm text-gray-600 mt-1">Filter by stream and cohort to view and manage assignments</p>
           </div>
-          <DataTable columns={assignmentColumns} data={assignments} />
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <LabeledSelect
+                label="Select Stream"
+                value={selectedStreamId}
+                onChange={handleStreamChange}
+                options={streams.map(s => ({ value: s.id.toString(), label: s.title }))}
+                placeholder="Choose a stream"
+              />
+              <LabeledSelect
+                label="Select Cohort"
+                value={selectedCohortId}
+                onChange={handleCohortChange}
+                options={cohorts
+                  .filter(c => selectedStreamId ? c.stream_id === parseInt(selectedStreamId, 10) : false)
+                  .map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
+                placeholder={selectedStreamId ? 'Choose a cohort' : 'Select a stream first'}
+                disabled={!selectedStreamId}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by title..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              <div className="text-sm text-gray-600">
+                {selectedStreamId && selectedCohortId ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded bg-gray-100">Filters active</span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded bg-gray-50">Select filters to view</span>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setShowCreateModal(true);
+                  setNewAssignment((prev) => ({
+                    ...prev,
+                    cohort_id: selectedCohortId || '',
+                  }));
+                }}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+                disabled={!selectedCohortId}
+                title={!selectedCohortId ? 'Select a cohort first' : 'Create Assignment'}
+              >
+                Create Assignment
+              </button>
+            </div>
+          </div>
+          {selectedCohortId ? (
+            <DataTable
+              columns={assignmentColumns}
+              data={assignments.filter(a => {
+                const term = searchTerm.trim().toLowerCase();
+                if (!term) return true;
+                return (a.title || '').toLowerCase().includes(term);
+              })}
+            />
+          ) : (
+            <div className="px-6 pb-6 text-sm text-gray-500">Select a stream and cohort to view assignments.</div>
+          )}
         </Card>
 
         <Modal
@@ -249,6 +356,36 @@ export default function AssignmentsPage() {
               </div>
             </div>
           )}
+        </Modal>
+
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => { setShowDeleteModal(false); setAssignmentToDelete(null); }}
+          title="Delete Assignment"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              Are you sure you want to delete the assignment{' '}
+              <span className="font-semibold">{assignmentToDelete?.title || ''}</span>?
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => { setShowDeleteModal(false); setAssignmentToDelete(null); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => assignmentToDelete && handleDeleteAssignment(assignmentToDelete.id)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </Modal>
       </div>
     </AdminLayout>

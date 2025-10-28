@@ -10,6 +10,7 @@ import CohortsPage from './pages/CohortsPage';
 import SessionsPage from './pages/SessionsPage';
 import AttendancePage from './pages/AttendancePage';
 import AssignmentsPage from './pages/AssignmentsPage';
+import GradingPage from './pages/GradingPage';
 import StudentsPage from './pages/StudentsPage';
 import CertificatesPage from './pages/CertificatesPage';
 import AnnouncementsPage from './pages/AnnouncementsPage';
@@ -76,6 +77,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <AssignmentsPage />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/grading"
+            element={
+              <ProtectedRoute>
+                <GradingPage />
               </ProtectedRoute>
             }
           />
