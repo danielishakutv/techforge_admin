@@ -13,6 +13,7 @@ export default function AttendancePage() {
   const [sessions, setSessions] = useState([]);
   const [students, setStudents] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [selectedStreamId, setSelectedStreamId] = useState('');
   const [selectedCohortId, setSelectedCohortId] = useState('');
@@ -72,20 +73,33 @@ export default function AttendancePage() {
           api.getStudentsForCohort(selectedCohortId).catch(() => null),
           api.getSessionAttendance(selectedSessionId).catch(() => null),
         ]);
-        const studData = (studResp && studResp.success && Array.isArray(studResp.data)) ? studResp.data : [];
-        setStudents(studData);
-        
-        if (attResp && attResp.success && attResp.data) {
-          setSummary(attResp.data.summary || null);
-          // Build map from existing attendance
+        // Prefer new format if attendance endpoint returns array with attendance_status
+        if (attResp && attResp.success && Array.isArray(attResp.data)) {
+          const arr = attResp.data;
+          setStudents(arr);
           const map = {};
-          (attResp.data.attendance || []).forEach(a => {
-            map[a.user_id] = a.status;
+          arr.forEach(a => {
+            const status = a.attendance_status === 'present' ? 'present' : (a.attendance_status === 'absent' ? 'absent' : undefined);
+            if (status) map[a.user_id] = status;
           });
           setAttendanceMap(map);
-        } else {
           setSummary(null);
-          setAttendanceMap({});
+        } else {
+          // Fallback to old behavior: merge students list and attendance object
+          const studData = (studResp && studResp.success && Array.isArray(studResp.data)) ? studResp.data : [];
+          setStudents(studData);
+          if (attResp && attResp.success && attResp.data) {
+            setSummary(attResp.data.summary || null);
+            const map = {};
+            (attResp.data.attendance || []).forEach(a => {
+              const status = a.status === 'present' ? 'present' : (a.status === 'absent' ? 'absent' : undefined);
+              if (status) map[a.user_id] = status;
+            });
+            setAttendanceMap(map);
+          } else {
+            setSummary(null);
+            setAttendanceMap({});
+          }
         }
       } catch (err) {
         toast.error('Failed to load students or attendance');
@@ -118,7 +132,8 @@ export default function AttendancePage() {
   };
 
   const handleStatusChange = (userId, status) => {
-    setAttendanceMap(prev => ({ ...prev, [userId]: status }));
+  if (status !== 'present' && status !== 'absent') return;
+  setAttendanceMap(prev => ({ ...prev, [userId]: status }));
   };
 
   const handleMarkAttendance = async () => {
@@ -128,7 +143,7 @@ export default function AttendancePage() {
     }
     const records = students.map(s => ({
       user_id: s.user_id,
-      status: attendanceMap[s.user_id] || 'absent',
+      status: attendanceMap[s.user_id] === 'present' ? 'present' : 'absent',
     }));
     try {
       const resp = await api.markAttendance({
@@ -139,8 +154,27 @@ export default function AttendancePage() {
         toast.success('Attendance marked successfully');
         // Reload attendance
         const attResp = await api.getSessionAttendance(selectedSessionId);
-        if (attResp && attResp.success && attResp.data) {
-          setSummary(attResp.data.summary || null);
+        if (attResp && attResp.success) {
+          if (Array.isArray(attResp.data)) {
+            // New format: array of records with attendance_status
+            const arr = attResp.data;
+            const map = {};
+            arr.forEach(a => {
+              const status = a.attendance_status === 'present' ? 'present' : (a.attendance_status === 'absent' ? 'absent' : undefined);
+              if (status) map[a.user_id] = status;
+            });
+            setAttendanceMap(map);
+            setSummary(null);
+          } else if (attResp.data) {
+            // Old format with summary + attendance array
+            setSummary(attResp.data.summary || null);
+            const map = {};
+            (attResp.data.attendance || []).forEach(a => {
+              const status = a.status === 'present' ? 'present' : (a.status === 'absent' ? 'absent' : undefined);
+              if (status) map[a.user_id] = status;
+            });
+            setAttendanceMap(map);
+          }
         }
       } else {
         toast.error(resp?.error || 'Failed to mark attendance');
@@ -158,13 +192,25 @@ export default function AttendancePage() {
         toast.success('Attendance updated');
         // Reload
         const attResp = await api.getSessionAttendance(selectedSessionId);
-        if (attResp && attResp.success && attResp.data) {
-          setSummary(attResp.data.summary || null);
-          const map = {};
-          (attResp.data.attendance || []).forEach(a => {
-            map[a.user_id] = a.status;
-          });
-          setAttendanceMap(map);
+        if (attResp && attResp.success) {
+          if (Array.isArray(attResp.data)) {
+            const arr = attResp.data;
+            const map = {};
+            arr.forEach(a => {
+              const status = a.attendance_status === 'present' ? 'present' : (a.attendance_status === 'absent' ? 'absent' : undefined);
+              if (status) map[a.user_id] = status;
+            });
+            setAttendanceMap(map);
+            setSummary(null);
+          } else if (attResp.data) {
+            setSummary(attResp.data.summary || null);
+            const map = {};
+            (attResp.data.attendance || []).forEach(a => {
+              const status = a.status === 'present' ? 'present' : (a.status === 'absent' ? 'absent' : undefined);
+              if (status) map[a.user_id] = status;
+            });
+            setAttendanceMap(map);
+          }
         }
       } else {
         toast.error(resp?.error || 'Failed to update');
@@ -183,13 +229,25 @@ export default function AttendancePage() {
         toast.success('Attendance record deleted');
         // Reload
         const attResp = await api.getSessionAttendance(selectedSessionId);
-        if (attResp && attResp.success && attResp.data) {
-          setSummary(attResp.data.summary || null);
-          const map = {};
-          (attResp.data.attendance || []).forEach(a => {
-            map[a.user_id] = a.status;
-          });
-          setAttendanceMap(map);
+        if (attResp && attResp.success) {
+          if (Array.isArray(attResp.data)) {
+            const arr = attResp.data;
+            const map = {};
+            arr.forEach(a => {
+              const status = a.attendance_status === 'present' ? 'present' : (a.attendance_status === 'absent' ? 'absent' : undefined);
+              if (status) map[a.user_id] = status;
+            });
+            setAttendanceMap(map);
+            setSummary(null);
+          } else if (attResp.data) {
+            setSummary(attResp.data.summary || null);
+            const map = {};
+            (attResp.data.attendance || []).forEach(a => {
+              const status = a.status === 'present' ? 'present' : (a.status === 'absent' ? 'absent' : undefined);
+              if (status) map[a.user_id] = status;
+            });
+            setAttendanceMap(map);
+          }
         }
       } else {
         toast.error(resp?.error || 'Failed to delete');
@@ -225,26 +283,32 @@ export default function AttendancePage() {
   const studentColumns = [
     {
       header: 'Name',
-      render: (row) => `${row.first_name} ${row.last_name}`,
+      render: (row) => row.display_name || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
     },
+    { header: 'Email', accessor: 'email' },
     {
-      header: 'Email',
-      accessor: 'email',
-    },
-    {
-      header: 'Status',
+      header: 'Mark',
       render: (row) => {
         const current = attendanceMap[row.user_id] || 'absent';
         return (
-          <select
-            value={current}
-            onChange={(e) => handleStatusChange(row.user_id, e.target.value)}
-            className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          >
-            <option value="present">Present</option>
-            <option value="absent">Absent</option>
-            <option value="late">Late</option>
-          </select>
+          <div className="inline-flex rounded-md shadow-sm" role="group">
+            <button
+              type="button"
+              onClick={() => handleStatusChange(row.user_id, 'present')}
+              className={`px-3 py-1.5 text-sm border ${current === 'present' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' } rounded-l-md`}
+              aria-pressed={current === 'present'}
+            >
+              Present
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStatusChange(row.user_id, 'absent')}
+              className={`px-3 py-1.5 text-sm border-t border-b border-r ${current === 'absent' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' } rounded-r-md`}
+              aria-pressed={current === 'absent'}
+            >
+              Absent
+            </button>
+          </div>
         );
       },
     },
@@ -255,7 +319,7 @@ export default function AttendancePage() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleUpdateSingle(row.user_id, attendanceMap[row.user_id] || 'absent');
+              handleUpdateSingle(row.user_id, attendanceMap[row.user_id] === 'present' ? 'present' : 'absent');
             }}
             className="text-sm text-primary-600 hover:underline"
           >
@@ -274,6 +338,14 @@ export default function AttendancePage() {
       ),
     },
   ];
+
+  const filteredStudents = students.filter((s) => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return true;
+    const name = (s.display_name || `${s.first_name || ''} ${s.last_name || ''}`).toLowerCase();
+    const email = (s.email || '').toLowerCase();
+    return name.includes(term) || email.includes(term);
+  });
 
   return (
     <AdminLayout pageTitle="Attendance">
@@ -333,7 +405,16 @@ export default function AttendancePage() {
             )}
 
             {selectedSessionId && students.length > 0 && (
-              <div className="flex justify-between items-center pt-2">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
+                <div className="flex-1 max-w-md">
+                  <input
+                    type="search"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search by name or email..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                  />
+                </div>
                 <button
                   onClick={handleMarkAttendance}
                   className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
@@ -356,7 +437,7 @@ export default function AttendancePage() {
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Students</h3>
             </div>
-            <DataTable columns={studentColumns} data={students} />
+            <DataTable columns={studentColumns} data={filteredStudents} />
           </Card>
         )}
 
