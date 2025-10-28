@@ -21,6 +21,8 @@ export default function AttendancePage() {
   
   const [attendanceMap, setAttendanceMap] = useState({}); // { user_id: 'present'|'absent'|'late' }
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSingleDeleteModal, setShowSingleDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null); // { user_id, display_name, first_name, last_name, email }
 
   // Load streams and cohorts on mount
   useEffect(() => {
@@ -222,11 +224,12 @@ export default function AttendancePage() {
 
   const handleDeleteSingle = async (userId) => {
     if (!selectedSessionId) return;
-    if (!window.confirm('Delete this attendance record?')) return;
     try {
       const resp = await api.deleteSingleAttendance(selectedSessionId, userId);
       if (resp && resp.success) {
         toast.success('Attendance record deleted');
+        setShowSingleDeleteModal(false);
+        setUserToDelete(null);
         // Reload
         const attResp = await api.getSessionAttendance(selectedSessionId);
         if (attResp && attResp.success) {
@@ -328,7 +331,8 @@ export default function AttendancePage() {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleDeleteSingle(row.user_id);
+              setUserToDelete(row);
+              setShowSingleDeleteModal(true);
             }}
             className="text-sm text-red-600 hover:underline"
           >
@@ -464,6 +468,38 @@ export default function AttendancePage() {
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
               >
                 Clear All
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={showSingleDeleteModal}
+          onClose={() => { setShowSingleDeleteModal(false); setUserToDelete(null); }}
+          title="Delete Attendance Record"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              Are you sure you want to delete the attendance record for{' '}
+              <span className="font-semibold">
+                {userToDelete?.display_name || `${userToDelete?.first_name || ''} ${userToDelete?.last_name || ''}`.trim() || 'this user'}
+              </span>
+              ? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => { setShowSingleDeleteModal(false); setUserToDelete(null); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => userToDelete && handleDeleteSingle(userToDelete.user_id)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
+              >
+                Delete
               </button>
             </div>
           </div>
