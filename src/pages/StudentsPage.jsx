@@ -7,8 +7,8 @@ import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState([]);
@@ -186,37 +186,42 @@ export default function StudentsPage() {
       return;
     }
 
-    const doc = new jsPDF('landscape');
-    doc.setFontSize(18);
-    doc.text('Students Report', 14, 20);
-    doc.setFontSize(11);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
+    try {
+      const doc = new jsPDF('landscape');
+      doc.setFontSize(18);
+      doc.text('Students Report', 14, 20);
+      doc.setFontSize(11);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
 
-    const headers = [['Name', 'Email', 'Phone', 'Cohort', 'Stream', 'Progress (%)', 'Attendance (%)', 'Status', 'Cert. Eligible']];
-    const rows = filteredStudents.map(s => [
-      s.full_name || s.display_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—',
-      s.email || '—',
-      s.phone || '—',
-      s.cohort_name || '—',
-      s.stream_title || '—',
-      s.progress_percent !== undefined ? s.progress_percent : '—',
-      s.attendance_rate !== undefined ? s.attendance_rate : '—',
-      s.completion_status || '—',
-      s.certificate_eligible ? 'Yes' : 'No',
-    ]);
+      const headers = [['Name', 'Email', 'Phone', 'Cohort', 'Stream', 'Progress (%)', 'Attendance (%)', 'Status', 'Cert. Eligible']];
+      const rows = filteredStudents.map(s => [
+        s.full_name || s.display_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—',
+        s.email || '—',
+        s.phone || '—',
+        s.cohort_name || '—',
+        s.stream_title || '—',
+        s.progress_percent !== undefined ? s.progress_percent : '—',
+        s.attendance_rate !== undefined ? s.attendance_rate : '—',
+        s.completion_status || '—',
+        s.certificate_eligible ? 'Yes' : 'No',
+      ]);
 
-    doc.autoTable({
-      head: headers,
-      body: rows,
-      startY: 35,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [59, 130, 246], textColor: 255 },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
-      margin: { top: 35 },
-    });
+      autoTable(doc, {
+        head: headers,
+        body: rows,
+        startY: 35,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { top: 35 },
+      });
 
-    doc.save(`students_${new Date().toISOString().split('T')[0]}.pdf`);
-    toast.success('Students exported to PDF');
+      doc.save(`students_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('Students exported to PDF');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast.error('Failed to export PDF');
+    }
   };
 
   const studentColumns = [
