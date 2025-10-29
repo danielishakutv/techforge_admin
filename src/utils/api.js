@@ -144,6 +144,13 @@ export const api = {
   getAssignment: (id) => apiRequest(`/admin/assignments/${id}`),
   updateAssignment: (id, data) => apiRequest(`/admin/assignments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAssignment: (id) => apiRequest(`/admin/assignments/${id}`, { method: 'DELETE' }),
+  
+  // Grading
+  getAssignmentStudents: (assignmentId) => apiRequest(`/admin/assignments/${assignmentId}/students`),
+  gradeBulk: (assignmentId, data) => apiRequest(`/admin/assignments/${assignmentId}/grade-bulk`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
   gradeSubmission: (submissionId, data) => apiRequest(`/submissions/${submissionId}/grade`, {
     method: 'POST',
     body: JSON.stringify(data),
