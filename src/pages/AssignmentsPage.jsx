@@ -89,7 +89,11 @@ export default function AssignmentsPage() {
       try {
         const payload = {
           title: editAssignment.title,
+          description: editAssignment.description || '',
+          reference_material: editAssignment.reference_material || null,
+          response_type: editAssignment.response_type,
           due_datetime: editAssignment.due_datetime,
+          max_score: parseInt(editAssignment.max_score, 10),
         };
         const resp = await api.updateAssignment(editAssignment.id, payload);
         if (resp && resp.success) {
@@ -368,6 +372,7 @@ export default function AssignmentsPage() {
           isOpen={showEditModal}
           onClose={() => setShowEditModal(false)}
           title="Edit Assignment"
+          size="lg"
         >
           {editAssignment && (
             <div className="space-y-4">
@@ -378,10 +383,56 @@ export default function AssignmentsPage() {
                 required
               />
               <LabeledInput
+                label="Description"
+                value={editAssignment.description || ''}
+                onChange={(e) => setEditAssignment({ ...editAssignment, description: e.target.value })}
+                placeholder="Assignment instructions..."
+              />
+              <LabeledInput
+                label="Reference Material"
+                value={editAssignment.reference_material || ''}
+                onChange={(e) => setEditAssignment({ ...editAssignment, reference_material: e.target.value })}
+                placeholder="Link to reference material (optional)"
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Response Type <span className="text-red-500">*</span>
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="text"
+                      checked={editAssignment.response_type === 'text'}
+                      onChange={(e) => setEditAssignment({ ...editAssignment, response_type: e.target.value })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Text submission</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="link"
+                      checked={editAssignment.response_type === 'link'}
+                      onChange={(e) => setEditAssignment({ ...editAssignment, response_type: e.target.value })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Link submission</span>
+                  </label>
+                </div>
+              </div>
+              <LabeledInput
                 label="Due Date & Time"
                 type="datetime-local"
                 value={formatForInput(editAssignment.due_datetime)}
                 onChange={(e) => setEditAssignment({ ...editAssignment, due_datetime: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="Max Score"
+                type="number"
+                value={editAssignment.max_score}
+                onChange={(e) => setEditAssignment({ ...editAssignment, max_score: e.target.value })}
                 required
               />
               <div className="flex justify-end space-x-3 pt-4">
