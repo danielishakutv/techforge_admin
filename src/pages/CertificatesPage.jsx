@@ -4,6 +4,7 @@ import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
+import { jsPDF } from 'jspdf';
 
 export default function CertificatesPage() {
   const [eligibleStudents, setEligibleStudents] = useState([]);
@@ -75,34 +76,141 @@ export default function CertificatesPage() {
 
   const handleDownloadCertificate = async (userId, studentName) => {
     try {
-      toast.info(`Downloading certificate for ${studentName}...`);
-      const resp = await api.downloadCertificate(userId, 'url');
+      toast.info(`Generating certificate for ${studentName}...`);
       
-      if (resp && resp.success) {
-        // If the backend returns a URL or blob
-        if (resp.data && resp.data.url) {
-          // Open the certificate URL in a new tab
-          window.open(resp.data.url, '_blank');
-          toast.success('Certificate downloaded successfully');
-          loadEligibleStudents(); // Reload to update download count
-        } else if (resp.data && resp.data.certificate_data) {
-          // If it returns base64 or file data
-          const link = document.createElement('a');
-          link.href = resp.data.certificate_data;
-          link.download = `certificate_${userId}_${Date.now()}.pdf`;
-          link.click();
-          toast.success('Certificate downloaded successfully');
-          loadEligibleStudents();
-        } else {
-          toast.success('Certificate download initiated');
-          loadEligibleStudents();
-        }
-      } else {
-        toast.error(resp?.error || 'Failed to download certificate');
+      // Fetch certificate data from backend
+      const resp = await api.getCertificateData(userId);
+      
+      if (!resp || !resp.success || !resp.data) {
+        toast.error(resp?.error || 'Failed to fetch certificate data');
+        return;
       }
+
+      const certData = resp.data;
+      
+      // Generate PDF certificate
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // Background border
+      doc.setDrawColor(59, 130, 246); // primary-600
+      doc.setLineWidth(2);
+      doc.rect(10, 10, pageWidth - 20, pageHeight - 20);
+      
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(0.5);
+      doc.rect(12, 12, pageWidth - 24, pageHeight - 24);
+
+      // Add logo if available
+      if (certData.logo_url) {
+        try {
+          // Note: Cross-origin images may require CORS or proxy
+          // For now, we'll show logo URL as text or skip
+          doc.setFontSize(10);
+          doc.setTextColor(100);
+          doc.text('Logo: Toko Academy', pageWidth / 2, 25, { align: 'center' });
+        } catch (e) {
+          console.warn('Logo load failed', e);
+        }
+      }
+
+      // Certificate title
+      doc.setFontSize(32);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(59, 130, 246);
+      doc.text('CERTIFICATE OF COMPLETION', pageWidth / 2, 50, { align: 'center' });
+
+      // Subtitle
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100);
+      doc.text('This is to certify that', pageWidth / 2, 65, { align: 'center' });
+
+      // Student name
+      doc.setFontSize(28);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0);
+      doc.text(certData.student_name, pageWidth / 2, 80, { align: 'center' });
+
+      // Achievement text
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100);
+      doc.text('has successfully completed the', pageWidth / 2, 95, { align: 'center' });
+
+      // Stream title
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(59, 130, 246);
+      doc.text(certData.stream_title, pageWidth / 2, 108, { align: 'center' });
+
+      // Cohort and description
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80);
+      doc.text(`${certData.cohort_name}`, pageWidth / 2, 118, { align: 'center' });
+      
+      if (certData.stream_description) {
+        doc.setFontSize(10);
+        doc.setTextColor(120);
+        doc.text(certData.stream_description, pageWidth / 2, 128, { align: 'center' });
+      }
+
+      // Issue date
+      doc.setFontSize(11);
+      doc.setTextColor(0);
+      doc.text(`Issued on: ${new Date(certData.issued_date).toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })}`, pageWidth / 2, 145, { align: 'center' });
+
+      // Certificate number
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(`Certificate No: ${certData.certificate_number}`, pageWidth / 2, 155, { align: 'center' });
+
+      // Signature section
+      const sigY = pageHeight - 40;
+      doc.setLineWidth(0.5);
+      doc.setDrawColor(150);
+      doc.line(40, sigY, 90, sigY);
+      doc.line(pageWidth - 90, sigY, pageWidth - 40, sigY);
+
+      doc.setFontSize(10);
+      doc.setTextColor(0);
+      doc.text('Director', 65, sigY + 7, { align: 'center' });
+      doc.text('Toko Academy', pageWidth - 65, sigY + 7, { align: 'center' });
+
+      // Footer
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text('Toko Academy Bootcamp Program', pageWidth / 2, pageHeight - 15, { align: 'center' });
+
+      // Save PDF
+      doc.save(`Certificate_${certData.student_name.replace(/\s+/g, '_')}_${certData.certificate_number}.pdf`);
+      
+      toast.success('Certificate downloaded successfully');
+
+      // Silently increment download count
+      try {
+        await api.incrementDownload(certData.certificate_id);
+        // Reload students to update download count display
+        loadEligibleStudents();
+      } catch (err) {
+        console.error('Failed to increment download count', err);
+        // Don't show error to user, just log it
+      }
+      
     } catch (err) {
       console.error('Failed to download certificate', err);
-      toast.error('Failed to download certificate');
+      toast.error('Failed to generate certificate');
     }
   };
 
