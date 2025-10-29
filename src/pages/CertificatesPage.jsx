@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 
 export default function CertificatesPage() {
   const [eligibleStudents, setEligibleStudents] = useState([]);
+  const [totalEligible, setTotalEligible] = useState(0);
   const [streams, setStreams] = useState([]);
   const [cohorts, setCohorts] = useState([]);
   const [streamFilter, setStreamFilter] = useState('');
@@ -40,16 +41,28 @@ export default function CertificatesPage() {
       if (cohortFilter) params.cohort_id = cohortFilter;
       
       const resp = await api.getEligibleStudents(params);
-      if (resp && resp.success && Array.isArray(resp.data)) {
-        setEligibleStudents(resp.data);
+      if (resp && resp.success) {
+        // Handle either array or { items, total }
+        if (Array.isArray(resp.data)) {
+          setEligibleStudents(resp.data);
+          setTotalEligible(resp.data.length);
+        } else if (resp.data && Array.isArray(resp.data.items)) {
+          setEligibleStudents(resp.data.items);
+          setTotalEligible(typeof resp.data.total === 'number' ? resp.data.total : resp.data.items.length);
+        } else {
+          setEligibleStudents([]);
+          setTotalEligible(0);
+        }
       } else {
         setEligibleStudents([]);
+        setTotalEligible(0);
         if (resp?.error) toast.error(resp.error);
       }
     } catch (err) {
       console.error('Failed to load eligible students', err);
       toast.error('Failed to load eligible students');
       setEligibleStudents([]);
+      setTotalEligible(0);
     } finally {
       setLoading(false);
     }
@@ -63,7 +76,7 @@ export default function CertificatesPage() {
   const handleDownloadCertificate = async (userId, studentName) => {
     try {
       toast.info(`Downloading certificate for ${studentName}...`);
-      const resp = await api.downloadCertificate(userId);
+      const resp = await api.downloadCertificate(userId, 'url');
       
       if (resp && resp.success) {
         // If the backend returns a URL or blob
@@ -131,7 +144,12 @@ export default function CertificatesPage() {
     {
       header: 'Attendance',
       render: (row) => {
-        const attendance = row.attendance_rate !== undefined ? Math.round(row.attendance_rate * 100) : 0;
+        const attendance =
+          typeof row.attendance_percentage === 'number'
+            ? Math.round(row.attendance_percentage)
+            : (row.attendance_rate !== undefined
+                ? Math.round(row.attendance_rate * 100)
+                : 0);
         return <span className="text-sm">{attendance}%</span>;
       },
     },

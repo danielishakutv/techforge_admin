@@ -198,9 +198,12 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return apiRequest(`/admin/certificates/eligible${qs ? `?${qs}` : ''}`);
   },
-  downloadCertificate: (userId) => apiRequest(`/admin/certificates/download/${userId}`, {
-    method: 'GET',
-  }),
+  downloadCertificate: (userId, format = 'url') => {
+    const qs = new URLSearchParams({ format }).toString();
+    return apiRequest(`/admin/certificates/download/${userId}${qs ? `?${qs}` : ''}`, {
+      method: 'GET',
+    });
+  },
   issueCertificate: (data) => apiRequest('/admin/certificates/issue', {
     method: 'POST',
     body: JSON.stringify(data),
