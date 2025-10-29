@@ -190,7 +190,17 @@ export const api = {
   }),
 
   // Certificates
-  getCertificates: () => apiRequest('/admin/certificates'),
+  getCertificates: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/certificates${qs ? `?${qs}` : ''}`);
+  },
+  getEligibleStudents: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/certificates/eligible${qs ? `?${qs}` : ''}`);
+  },
+  downloadCertificate: (userId) => apiRequest(`/admin/certificates/download/${userId}`, {
+    method: 'GET',
+  }),
   issueCertificate: (data) => apiRequest('/admin/certificates/issue', {
     method: 'POST',
     body: JSON.stringify(data),
