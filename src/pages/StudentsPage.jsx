@@ -2,70 +2,183 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '../components/layout/AdminLayout';
 import Card from '../components/ui/Card';
 import DataTable from '../components/ui/DataTable';
-import Drawer from '../components/ui/Drawer';
-import StatusBadge from '../components/ui/StatusBadge';
-import ProgressBar from '../components/ui/ProgressBar';
+import Modal from '../components/ui/Modal';
+import LabeledInput from '../components/ui/LabeledInput';
+import LabeledSelect from '../components/ui/LabeledSelect';
 import api from '../utils/api';
+import { toast } from 'react-toastify';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState([]);
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [streams, setStreams] = useState([]);
+  const [cohorts, setCohorts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [streamFilter, setStreamFilter] = useState('');
+  const [cohortFilter, setCohortFilter] = useState('');
+  
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [studentToEdit, setStudentToEdit] = useState(null);
+  const [studentToDelete, setStudentToDelete] = useState(null);
+
+  const [newStudent, setNewStudent] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    cohort_id: '',
+  });
   
 
   useEffect(() => {
     let mounted = true;
     async function load() {
       try {
-        const resp = await api.getStudents();
+        const [studResp, streamResp, cohortResp] = await Promise.all([
+          api.getStudents().catch(() => null),
+          api.getStreams().catch(() => null),
+          api.getCohorts().catch(() => null),
+        ]);
         if (!mounted) return;
-        setStudents((resp && resp.success && resp.data.items) || []);
+        setStudents((studResp && studResp.success && Array.isArray(studResp.data)) ? studResp.data : []);
+        setStreams((streamResp && streamResp.success && Array.isArray(streamResp.data)) ? streamResp.data : []);
+        setCohorts((cohortResp && cohortResp.success && Array.isArray(cohortResp.data)) ? cohortResp.data : []);
       } catch (err) {
-        console.error('Failed to load students', err);
-      } finally {
-        // no-op
+        console.error('Failed to load students page data', err);
+        toast.error('Failed to load data');
       }
     }
     load();
     return () => { mounted = false; };
   }, []);
 
+  const loadStudents = async () => {
+    try {
+      const params = {};
+      if (streamFilter) params.stream_id = streamFilter;
+      if (cohortFilter) params.cohort_id = cohortFilter;
+      const resp = await api.getStudents(params);
+      setStudents((resp && resp.success && Array.isArray(resp.data)) ? resp.data : []);
+    } catch (err) {
+      toast.error('Failed to load students');
+    }
+  };
+
+  useEffect(() => {
+    loadStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamFilter, cohortFilter]);
+
+  const handleCreateStudent = async (e) => {
+    e.preventDefault();
+    try {
+      const resp = await api.createStudent(newStudent);
+      if (resp && resp.success) {
+        toast.success('Student created successfully');
+        setShowCreateModal(false);
+        setNewStudent({ first_name: '', last_name: '', email: '', phone: '', cohort_id: '' });
+        loadStudents();
+      } else {
+        toast.error(resp?.error || 'Failed to create student');
+      }
+    } catch (err) {
+      toast.error('Failed to create student');
+    }
+  };
+
+  const handleUpdateStudent = async (e) => {
+    e.preventDefault();
+    if (!studentToEdit) return;
+    try {
+      const payload = {
+        first_name: studentToEdit.first_name,
+        last_name: studentToEdit.last_name,
+        email: studentToEdit.email,
+        phone: studentToEdit.phone,
+      };
+      const resp = await api.updateStudent(studentToEdit.user_id, payload);
+      if (resp && resp.success) {
+        toast.success('Student updated successfully');
+        setShowEditModal(false);
+        setStudentToEdit(null);
+        loadStudents();
+      } else {
+        toast.error(resp?.error || 'Failed to update student');
+      }
+    } catch (err) {
+      toast.error('Failed to update student');
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!studentToDelete) return;
+    try {
+      const resp = await api.deleteStudent(studentToDelete.user_id);
+      if (resp && resp.success) {
+        toast.success('Student deleted successfully');
+        setShowDeleteModal(false);
+        setStudentToDelete(null);
+        loadStudents();
+      } else {
+        toast.error(resp?.error || 'Failed to delete student');
+      }
+    } catch (err) {
+      toast.error('Failed to delete student');
+    }
+  };
+
   const filteredStudents = (students || []).filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          student.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStream = streamFilter === '' || student.stream === streamFilter;
-    return matchesSearch && matchesStream;
+    const term = searchTerm.toLowerCase();
+    if (!term) return true;
+    const name = `${student.first_name || ''} ${student.last_name || ''}`.toLowerCase();
+    const displayName = (student.display_name || '').toLowerCase();
+    const email = (student.email || '').toLowerCase();
+    const phone = (student.phone || '').toLowerCase();
+    return name.includes(term) || displayName.includes(term) || email.includes(term) || phone.includes(term);
   });
 
   const studentColumns = [
     {
       header: 'Name',
-      accessor: 'name',
+      render: (row) => row.display_name || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+    },
+    { header: 'Email', accessor: 'email' },
+    { header: 'Phone', accessor: 'phone' },
+    {
+      header: 'Cohort',
+      render: (row) => {
+        const cohort = cohorts.find(c => c.id === row.cohort_id);
+        return cohort ? cohort.cohort_name : row.cohort_id || '—';
+      },
     },
     {
       header: 'Stream',
-      accessor: 'stream',
+      render: (row) => {
+        const cohort = cohorts.find(c => c.id === row.cohort_id);
+        if (!cohort) return '—';
+        const stream = streams.find(s => s.id === cohort.stream_id);
+        return stream ? stream.title : '—';
+      },
     },
     {
-      header: 'Cohort',
-      accessor: 'cohort',
-    },
-    {
-      header: 'Progress',
+      header: 'Actions',
       render: (row) => (
-        <div className="w-32">
-          <ProgressBar value={row.progress} showLabel={true} />
+        <div className="flex space-x-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); setStudentToEdit(row); setShowEditModal(true); }}
+            className="text-sm text-primary-600 hover:underline"
+          >
+            Edit
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setStudentToDelete(row); setShowDeleteModal(true); }}
+            className="text-sm text-red-600 hover:underline"
+          >
+            Delete
+          </button>
         </div>
       ),
-    },
-    {
-      header: 'Attendance Rate',
-      render: (row) => `${Math.round(row.attendanceRate * 100)}%`,
-    },
-    {
-      header: 'Status',
-      render: (row) => <StatusBadge status={row.status} />,
     },
   ];
 
@@ -76,101 +189,192 @@ export default function StudentsPage() {
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">All Students</h3>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+              >
+                Add Student
+              </button>
             </div>
-            <div className="flex space-x-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input
                 type="search"
                 placeholder="Search by name, email, or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
               />
               <select
                 value={streamFilter}
-                onChange={(e) => setStreamFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                onChange={(e) => { setStreamFilter(e.target.value); setCohortFilter(''); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
               >
                 <option value="">All Streams</option>
-                <option value="Web Development">Web Development</option>
-                <option value="AI Essentials">AI Essentials</option>
-                <option value="Data Analysis & Visualization">Data Analysis & Visualization</option>
+                {streams.map(s => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
+              <select
+                value={cohortFilter}
+                onChange={(e) => setCohortFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                disabled={!streamFilter}
+              >
+                <option value="">All Cohorts</option>
+                {cohorts
+                  .filter(c => streamFilter ? c.stream_id === parseInt(streamFilter, 10) : true)
+                  .map(c => (
+                    <option key={c.id} value={c.id}>{c.cohort_name}</option>
+                  ))}
               </select>
             </div>
           </div>
-          <DataTable
-            columns={studentColumns}
-            data={filteredStudents}
-            onRowClick={(student) => setSelectedStudent(student)}
-          />
+          <DataTable columns={studentColumns} data={filteredStudents} />
         </Card>
 
-        <Drawer
-          isOpen={selectedStudent !== null}
-          onClose={() => setSelectedStudent(null)}
-          title={selectedStudent?.name || ''}
+        <Modal
+          isOpen={showCreateModal}
+          onClose={() => { setShowCreateModal(false); setNewStudent({ first_name: '', last_name: '', email: '', phone: '', cohort_id: '' }); }}
+          title="Add New Student"
+          size="lg"
         >
-          {selectedStudent && (
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Personal Details</h4>
-                <div className="space-y-2">
-                  <p className="text-sm"><span className="font-medium">Full Name:</span> {selectedStudent.name}</p>
-                  <p className="text-sm"><span className="font-medium">Gender:</span> {selectedStudent.gender}</p>
-                  <p className="text-sm"><span className="font-medium">Date of Birth:</span> {new Date(selectedStudent.dob).toLocaleDateString('en-NG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                  <p className="text-sm"><span className="font-medium">Location:</span> {selectedStudent.city}, {selectedStudent.state}, {selectedStudent.country}</p>
-                  <p className="text-sm"><span className="font-medium">Phone:</span> {selectedStudent.phone}</p>
-                  <p className="text-sm"><span className="font-medium">Email:</span> {selectedStudent.email}</p>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Enrollment Information</h4>
-                <div className="space-y-2">
-                  <p className="text-sm"><span className="font-medium">Stream:</span> {selectedStudent.stream}</p>
-                  <p className="text-sm"><span className="font-medium">Cohort:</span> {selectedStudent.cohort}</p>
-                  <p className="text-sm"><span className="font-medium">Enrollment Date:</span> {new Date(selectedStudent.enrollmentDate).toLocaleDateString('en-NG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                  <p className="text-sm"><span className="font-medium">Status:</span> <StatusBadge status={selectedStudent.status} /></p>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Performance</h4>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium mb-2">Course Progress</p>
-                    <ProgressBar value={selectedStudent.progress} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium mb-2">Attendance Rate</p>
-                    <ProgressBar value={selectedStudent.attendanceRate * 100} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Certificate Eligibility</h4>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Eligible for Certificate:</span>
-                    <StatusBadge status={selectedStudent.certificateEligible ? 'Eligible' : 'Not Eligible'} />
-                  </div>
-                  {!selectedStudent.certificateEligible && selectedStudent.certificateEligibilityReason && (
-                    <p className="text-xs text-gray-600 mt-2">Reason: {selectedStudent.certificateEligibilityReason}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200 space-y-3">
-                <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium">
-                  Change Status
-                </button>
-                <button className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium">
-                  Send Password Reset Link
-                </button>
-              </div>
+          <form onSubmit={handleCreateStudent} className="space-y-4">
+            <LabeledInput
+              label="First Name"
+              value={newStudent.first_name}
+              onChange={(e) => setNewStudent({ ...newStudent, first_name: e.target.value })}
+              required
+            />
+            <LabeledInput
+              label="Last Name"
+              value={newStudent.last_name}
+              onChange={(e) => setNewStudent({ ...newStudent, last_name: e.target.value })}
+              required
+            />
+            <LabeledInput
+              label="Email"
+              type="email"
+              value={newStudent.email}
+              onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+              required
+            />
+            <LabeledInput
+              label="Phone"
+              type="tel"
+              value={newStudent.phone}
+              onChange={(e) => setNewStudent({ ...newStudent, phone: e.target.value })}
+              placeholder="+234..."
+            />
+            <LabeledSelect
+              label="Cohort"
+              value={newStudent.cohort_id}
+              onChange={(e) => setNewStudent({ ...newStudent, cohort_id: e.target.value })}
+              options={cohorts.map(c => ({ value: c.id.toString(), label: c.cohort_name }))}
+              placeholder="Select a cohort"
+              required
+            />
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={() => { setShowCreateModal(false); setNewStudent({ first_name: '', last_name: '', email: '', phone: '', cohort_id: '' }); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+              >
+                Add Student
+              </button>
             </div>
+          </form>
+        </Modal>
+
+        <Modal
+          isOpen={showEditModal}
+          onClose={() => { setShowEditModal(false); setStudentToEdit(null); }}
+          title="Edit Student"
+          size="lg"
+        >
+          {studentToEdit && (
+            <form onSubmit={handleUpdateStudent} className="space-y-4">
+              <LabeledInput
+                label="First Name"
+                value={studentToEdit.first_name}
+                onChange={(e) => setStudentToEdit({ ...studentToEdit, first_name: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="Last Name"
+                value={studentToEdit.last_name}
+                onChange={(e) => setStudentToEdit({ ...studentToEdit, last_name: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="Email"
+                type="email"
+                value={studentToEdit.email}
+                onChange={(e) => setStudentToEdit({ ...studentToEdit, email: e.target.value })}
+                required
+              />
+              <LabeledInput
+                label="Phone"
+                type="tel"
+                value={studentToEdit.phone || ''}
+                onChange={(e) => setStudentToEdit({ ...studentToEdit, phone: e.target.value })}
+                placeholder="+234..."
+              />
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(false); setStudentToEdit(null); }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
           )}
-        </Drawer>
+        </Modal>
+
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => { setShowDeleteModal(false); setStudentToDelete(null); }}
+          title="Delete Student"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              Are you sure you want to delete{' '}
+              <span className="font-semibold">
+                {studentToDelete?.display_name || `${studentToDelete?.first_name || ''} ${studentToDelete?.last_name || ''}`.trim()}
+              </span>
+              ? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => { setShowDeleteModal(false); setStudentToDelete(null); }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteStudent}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </AdminLayout>
   );

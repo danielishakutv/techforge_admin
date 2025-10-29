@@ -157,12 +157,20 @@ export const api = {
   }),
 
   // Students
-  getStudents: () => apiRequest('/admin/students'),
-  getStudent: (id) => apiRequest(`/admin/students/${id}`),
-  updateStudent: (id, data) => apiRequest(`/admin/students/${id}`, {
-    method: 'PATCH',
+  getStudents: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/admin/students${qs ? `?${qs}` : ''}`);
+  },
+  createStudent: (data) => apiRequest('/admin/students', {
+    method: 'POST',
     body: JSON.stringify(data),
   }),
+  getStudent: (id) => apiRequest(`/admin/students/${id}`),
+  updateStudent: (id, data) => apiRequest(`/admin/students/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteStudent: (id) => apiRequest(`/admin/students/${id}`, { method: 'DELETE' }),
 
   // Users (Instructors)
   getInstructors: () => apiRequest('/admin/users?role=instructor'),
