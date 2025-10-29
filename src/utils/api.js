@@ -159,7 +159,7 @@ export const api = {
   // Students
   getStudents: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return apiRequest(`/admin/students${qs ? `?${qs}` : ''}`);
+    return apiRequest(`/admin/students${qs ? `?${qs}` : ''}${qs ? '&' : '?'}include_details=true`);
   },
   createStudent: (data) => apiRequest('/admin/students', {
     method: 'POST',

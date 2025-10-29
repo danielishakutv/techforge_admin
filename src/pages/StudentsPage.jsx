@@ -7,6 +7,8 @@ import LabeledInput from '../components/ui/LabeledInput';
 import LabeledSelect from '../components/ui/LabeledSelect';
 import api from '../utils/api';
 import { toast } from 'react-toastify';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export default function StudentsPage() {
   const [students, setStudents] = useState([]);
@@ -137,6 +139,86 @@ export default function StudentsPage() {
     return name.includes(term) || email.includes(term) || phone.includes(term);
   });
 
+  const exportToCSV = () => {
+    if (filteredStudents.length === 0) {
+      toast.warn('No students to export');
+      return;
+    }
+
+    const headers = ['Name', 'Email', 'Phone', 'Cohort', 'Stream', 'Progress (%)', 'Attendance (%)', 'Status', 'Certificate Eligible'];
+    const rows = filteredStudents.map(s => [
+      s.full_name || s.display_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—',
+      s.email || '—',
+      s.phone || '—',
+      s.cohort_name || '—',
+      s.stream_title || '—',
+      s.progress_percent !== undefined ? s.progress_percent : '—',
+      s.attendance_rate !== undefined ? s.attendance_rate : '—',
+      s.completion_status || '—',
+      s.certificate_eligible ? 'Yes' : 'No',
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const cellStr = String(cell);
+        return cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')
+          ? `"${cellStr.replace(/"/g, '""')}"`
+          : cellStr;
+      }).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `students_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Students exported to CSV');
+  };
+
+  const exportToPDF = () => {
+    if (filteredStudents.length === 0) {
+      toast.warn('No students to export');
+      return;
+    }
+
+    const doc = new jsPDF('landscape');
+    doc.setFontSize(18);
+    doc.text('Students Report', 14, 20);
+    doc.setFontSize(11);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
+
+    const headers = [['Name', 'Email', 'Phone', 'Cohort', 'Stream', 'Progress (%)', 'Attendance (%)', 'Status', 'Cert. Eligible']];
+    const rows = filteredStudents.map(s => [
+      s.full_name || s.display_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—',
+      s.email || '—',
+      s.phone || '—',
+      s.cohort_name || '—',
+      s.stream_title || '—',
+      s.progress_percent !== undefined ? s.progress_percent : '—',
+      s.attendance_rate !== undefined ? s.attendance_rate : '—',
+      s.completion_status || '—',
+      s.certificate_eligible ? 'Yes' : 'No',
+    ]);
+
+    doc.autoTable({
+      head: headers,
+      body: rows,
+      startY: 35,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      margin: { top: 35 },
+    });
+
+    doc.save(`students_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast.success('Students exported to PDF');
+  };
+
   const studentColumns = [
     {
       header: 'Name',
@@ -188,12 +270,32 @@ export default function StudentsPage() {
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">All Students</h3>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-              >
-                Add Student
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={exportToCSV}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium flex items-center"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export CSV
+                </button>
+                <button
+                  onClick={exportToPDF}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-medium flex items-center"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Export PDF
+                </button>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
+                >
+                  Add Student
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input
