@@ -135,7 +135,7 @@ export default function StudentsPage() {
     if (!term) return true;
     const name = (student.full_name || student.display_name || `${student.first_name || ''} ${student.last_name || ''}`).toLowerCase();
     const email = (student.email || '').toLowerCase();
-    const phone = (student.phone || '').toLowerCase();
+    const phone = (student.phone_number || student.phone || '').toLowerCase();
     return name.includes(term) || email.includes(term) || phone.includes(term);
   });
 
@@ -149,7 +149,7 @@ export default function StudentsPage() {
     const rows = filteredStudents.map(s => [
       s.full_name || s.display_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—',
       s.email || '—',
-      s.phone || '—',
+      s.phone_number || s.phone || '—',
       s.cohort_name || '—',
       s.stream_title || '—',
       s.progress_percent !== undefined ? s.progress_percent : '—',
@@ -197,7 +197,7 @@ export default function StudentsPage() {
       const rows = filteredStudents.map(s => [
         s.full_name || s.display_name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || '—',
         s.email || '—',
-        s.phone || '—',
+        s.phone_number || s.phone || '—',
         s.cohort_name || '—',
         s.stream_title || '—',
         s.progress_percent !== undefined ? s.progress_percent : '—',
@@ -236,8 +236,8 @@ export default function StudentsPage() {
     },
     { 
       header: 'Phone', 
-      accessor: 'phone',
-      render: (row) => row.phone || '—',
+      accessor: 'phone_number',
+      render: (row) => row.phone_number || row.phone || '—',
     },
     {
       header: 'Cohort',
