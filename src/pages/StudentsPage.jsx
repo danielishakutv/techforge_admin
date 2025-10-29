@@ -131,35 +131,34 @@ export default function StudentsPage() {
   const filteredStudents = (students || []).filter(student => {
     const term = searchTerm.toLowerCase();
     if (!term) return true;
-    const name = `${student.first_name || ''} ${student.last_name || ''}`.toLowerCase();
-    const displayName = (student.display_name || '').toLowerCase();
+    const name = (student.full_name || student.display_name || `${student.first_name || ''} ${student.last_name || ''}`).toLowerCase();
     const email = (student.email || '').toLowerCase();
     const phone = (student.phone || '').toLowerCase();
-    return name.includes(term) || displayName.includes(term) || email.includes(term) || phone.includes(term);
+    return name.includes(term) || email.includes(term) || phone.includes(term);
   });
 
   const studentColumns = [
     {
       header: 'Name',
-      render: (row) => row.display_name || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+      render: (row) => row.full_name || row.display_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || '—',
     },
-    { header: 'Email', accessor: 'email' },
-    { header: 'Phone', accessor: 'phone' },
+    { 
+      header: 'Email', 
+      accessor: 'email',
+      render: (row) => row.email || '—',
+    },
+    { 
+      header: 'Phone', 
+      accessor: 'phone',
+      render: (row) => row.phone || '—',
+    },
     {
       header: 'Cohort',
-      render: (row) => {
-        const cohort = cohorts.find(c => c.id === row.cohort_id);
-        return cohort ? cohort.cohort_name : row.cohort_id || '—';
-      },
+      render: (row) => row.cohort_name || '—',
     },
     {
       header: 'Stream',
-      render: (row) => {
-        const cohort = cohorts.find(c => c.id === row.cohort_id);
-        if (!cohort) return '—';
-        const stream = streams.find(s => s.id === cohort.stream_id);
-        return stream ? stream.title : '—';
-      },
+      render: (row) => row.stream_title || '—',
     },
     {
       header: 'Actions',
@@ -353,7 +352,7 @@ export default function StudentsPage() {
             <p className="text-sm text-gray-700">
               Are you sure you want to delete{' '}
               <span className="font-semibold">
-                {studentToDelete?.display_name || `${studentToDelete?.first_name || ''} ${studentToDelete?.last_name || ''}`.trim()}
+                {studentToDelete?.full_name || studentToDelete?.display_name || `${studentToDelete?.first_name || ''} ${studentToDelete?.last_name || ''}`.trim()}
               </span>
               ? This action cannot be undone.
             </p>
