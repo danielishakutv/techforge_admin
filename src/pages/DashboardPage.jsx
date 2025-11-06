@@ -16,18 +16,21 @@ export default function DashboardPage() {
     activeCohorts: 0,
     activeStreams: 0,
     totalStreams: 0,
+    totalStudents: 0,
   });
 
   useEffect(() => {
     async function load() {
       try {
-        const [cohResp, strResp] = await Promise.all([
+        const [cohResp, strResp, studResp] = await Promise.all([
           api.getCohorts().catch(() => null),
           api.getStreams().catch(() => null),
+          api.getStudents().catch(() => null),
         ]);
 
         const cohortsData = (cohResp && cohResp.success && Array.isArray(cohResp.data)) ? cohResp.data : [];
         const streamsData = (strResp && strResp.success && Array.isArray(strResp.data)) ? strResp.data : [];
+        const studentsData = (studResp && studResp.success && Array.isArray(studResp.data)) ? studResp.data : [];
 
         setStreams(streamsData);
 
@@ -38,6 +41,7 @@ export default function DashboardPage() {
           activeCohorts: activeCohorts.length,
           activeStreams,
           totalStreams: streamsData.length,
+          totalStudents: studentsData.length,
         });
 
         // Recent cohorts by most recent start_date (or id)
@@ -58,6 +62,7 @@ export default function DashboardPage() {
           activeCohorts: 0,
           activeStreams: 0,
           totalStreams: 0,
+          totalStudents: 0,
         });
         setUpcomingSessions([]);
         setAlerts([{ id: 1, message: 'Failed to load dashboard data.', type: 'warning' }]);
@@ -157,6 +162,15 @@ export default function DashboardPage() {
             icon={
               <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            }
+          />
+          <StatCard
+            title="Total Students"
+            value={stats.totalStudents}
+            icon={
+              <svg className="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             }
           />
